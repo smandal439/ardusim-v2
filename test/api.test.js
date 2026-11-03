@@ -6,7 +6,6 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import fs from 'node:fs';
 
 const ROOT = path.resolve(__dirname, '..');
 let serverProcess;
@@ -197,5 +196,22 @@ describe('REST API', () => {
     const res = await fetchJson('/');
     expect(res.status).toBe(200);
     expect(typeof res.body).toBe('string');
+  });
+
+  it('blocks sensitive files and case-insensitive bypass attempts', async () => {
+    const blockedPaths = [
+      '/server.js',
+      '/SERVER.JS',
+      '/data/ardusim.db',
+      '/DATA/ardusim.db',
+      '/.git/config',
+      '/.GIT/config',
+      '/package.json',
+      '/PACKAGE.JSON',
+    ];
+    for (const p of blockedPaths) {
+      const res = await fetchJson(p);
+      expect(res.status).toBe(404);
+    }
   });
 });

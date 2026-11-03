@@ -9,12 +9,12 @@
 
 'use strict';
 
-const express = require('express');
-const app = express();
+
+
 
 const http  = require('node:http');
 const https = require('node:https');
-const tls   = require('node:tls');
+
 const fs    = require('node:fs');
 const path  = require('node:path');
 const os    = require('node:os');
@@ -44,6 +44,16 @@ function checkRateLimit(ip) {
   bucket.count++;
   return bucket.count <= RATE_MAX_WRITE;
 }
+
+const _rateCleanupTimer = setInterval(() => {
+  const now = Date.now();
+  for (const [ip, bucket] of _rateBuckets.entries()) {
+    if (now - bucket.start > RATE_WINDOW_MS) {
+      _rateBuckets.delete(ip);
+    }
+  }
+}, 5 * 60_000);
+if (_rateCleanupTimer.unref) _rateCleanupTimer.unref();
 
 /* ── Self-signed TLS certificate (zero external deps) ── */
 const CERT_FILE = path.join(DATA_DIR, 'ardusim-cert.pem');
@@ -232,6 +242,8 @@ function sendJson(res, status, data) {
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'SAMEORIGIN',
   });
   res.end(JSON.stringify(data));
 }
@@ -343,7 +355,8 @@ function serveStatic(req, res, urlPath) {
   } catch (e) {
     return sendJson(res, 400, { error: 'Bad request' });
   }
-  if (BLOCKED.some(b => decoded === b || decoded.startsWith(b + '/'))) {
+  const lower = decoded.toLowerCase();
+  if (BLOCKED.some(b => lower === b.toLowerCase() || lower.startsWith(b.toLowerCase() + '/'))) {
     return sendJson(res, 404, { error: 'Not found' });
   }
 
@@ -353,7 +366,8 @@ function serveStatic(req, res, urlPath) {
   } catch (e) {
     return sendJson(res, 400, { error: 'Bad request' });
   }
-  if (!filePath.startsWith(ROOT)) return sendJson(res, 403, { error: 'Forbidden' });
+  const rootWithSep = ROOT.endsWith(path.sep) ? ROOT : ROOT + path.sep;
+  if (filePath !== ROOT && !filePath.startsWith(rootWithSep)) return sendJson(res, 403, { error: 'Forbidden' });
 
   fs.stat(filePath, (err, stat) => {
     if (err || !stat.isFile()) return sendJson(res, 404, { error: 'Not found' });
@@ -375,6 +389,8 @@ function serveStatic(req, res, urlPath) {
       'Cache-Control': noCache ? 'no-cache' : 'public, max-age=0, must-revalidate',
       'ETag': etag,
       'Last-Modified': stat.mtime.toUTCString(),
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'SAMEORIGIN',
     });
     fs.createReadStream(filePath).pipe(res);
   });

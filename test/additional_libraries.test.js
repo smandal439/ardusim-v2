@@ -45,7 +45,8 @@ describe('additional library transpilation', () => {
     const output = [];
     sim._serialLog = text => output.push(String(text));
 
-    const result = await sim.compile(example.code);
+    const code = example.code || (example.files && Object.values(example.files)[0]) || '';
+    const result = await sim.compile(code);
 
     expect(result.ok).toBe(true);
     const { vals, fn } = sim._compiledCtx;
@@ -232,7 +233,8 @@ describe('new library example sketches', () => {
     sim.setBoard(board.type);
     const output = [];
     sim._serialLog = text => output.push(String(text));
-    const result = await sim.compile(example.code);
+    const code = example.code || (example.files && Object.values(example.files)[0]) || '';
+    const result = await sim.compile(code);
     expect(result.ok).toBe(true);
 
     const { vals, fn } = sim._compiledCtx;

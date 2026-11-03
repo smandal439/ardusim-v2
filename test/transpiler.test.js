@@ -212,7 +212,8 @@ describe('transpile() — library plugins', () => {
   it('produces valid JavaScript for the RFID inventory tracker example', () => {
     const examplePath = path.resolve(__dirname, '..', 'Examples', 'rfid_inventory_tracker.json');
     const example = JSON.parse(fs.readFileSync(examplePath, 'utf8'));
-    const result = sim.transpile(example.code);
+    const code = example.code || (example.files && Object.values(example.files)[0]) || '';
+    const result = sim.transpile(code);
 
     expect(() => new Function(result)).not.toThrow();
     expect(result).toContain('_a.rfidInit(mfrc522)');
@@ -276,7 +277,8 @@ describe('transpile() — library plugins', () => {
   it('starts the IR Remote MP3 Player example and plays a track on remote input', async () => {
     const examplePath = path.resolve(__dirname, '..', 'Examples', 'ir_dfplayer_remote.json');
     const example = JSON.parse(fs.readFileSync(examplePath, 'utf8'));
-    const result = sim.transpile(example.code);
+    const code = example.code || (example.files && Object.values(example.files)[0]) || '';
+    const result = sim.transpile(code);
 
     expect(() => new Function(result)).not.toThrow();
     expect(result).toContain('_a.softSerialBegin(dfSerial, 9600)');
@@ -291,7 +293,7 @@ describe('transpile() — library plugins', () => {
     sim.onSerial = text => logs.push(text);
     sim.onEvent = (type, data) => events.push({ type, data });
 
-    const compiled = await sim.compile(example.code);
+    const compiled = await sim.compile(code);
     expect(compiled.ok).toBe(true);
     const sketch = sim._compiledFn(...sim._compiledCtx.vals);
     await sketch.setup();

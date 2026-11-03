@@ -21,9 +21,6 @@
     "iot"
   ],
   "license": "MIT",
-  "dependencies": {
-    "express": "^5.2.1"
-  },
   "devDependencies": {
     "eslint": "^10.10.0",
     "globals": "^17.12.0",
