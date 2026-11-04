@@ -1,4 +1,4 @@
-﻿/* 
+/* 
    js/electrical.js — Electrical Connection Engine
    Circuit graph builder, net tracer, voltage/current solver.
 */
@@ -504,7 +504,7 @@ class ElectricalEngine {
           if (!pinKey.startsWith(inst.id + ':')) continue;
           const pinId = pinKey.slice(inst.id.length + 1);
 
-          if (pinId === '5V' || pinId === 'VIN' || pinId === '5V2' || pinId === 'VCC' || pinId === 'VBUS') {
+          if (pinId === '5V' || pinId === 'VIN' || pinId === '5V2' || pinId === 'VCC' || pinId === 'VBUS' || pinId === 'IOREF') {
             // A battery wired straight to the supply rail IS the supply —
             // don't override its voltage with the board's fixed 5 V rail.
             if (!this._railHasBattery(inst.id, pinId)) addSource(pinId, '5v', 5.0, 255);

@@ -323,47 +323,54 @@ defComp({
   category: 'Boards',
   icon: '🎛️',
   desc: 'ATmega328P microcontroller board with digital and analog I/O pins',
-  width: 230,
+  width: 232,
   height: 150,
   defaultProps: { label: 'UNO' },
   pins: [
-    // Digital pins top row (D0–D13, from left), then GND + AREF
-    { id: 'D0',    label: 'D0',   type: PIN_TYPE.DIGITAL, x:  10, y:  12, side: 'top' },
-    { id: 'D1',    label: 'D1',   type: PIN_TYPE.DIGITAL, x:  24, y:  12, side: 'top' },
-    { id: 'D2',    label: 'D2',   type: PIN_TYPE.DIGITAL, x:  38, y:  12, side: 'top' },
-    { id: 'D3',    label: 'D3~',  type: PIN_TYPE.PWM,     x:  52, y:  12, side: 'top' },
-    { id: 'D4',    label: 'D4',   type: PIN_TYPE.DIGITAL, x:  66, y:  12, side: 'top' },
-    { id: 'D5',    label: 'D5~',  type: PIN_TYPE.PWM,     x:  80, y:  12, side: 'top' },
-    { id: 'D6',    label: 'D6~',  type: PIN_TYPE.PWM,     x:  94, y:  12, side: 'top' },
-    { id: 'D7',    label: 'D7',   type: PIN_TYPE.DIGITAL, x: 108, y:  12, side: 'top' },
-    { id: 'D8',    label: 'D8',   type: PIN_TYPE.DIGITAL, x: 122, y:  12, side: 'top' },
-    { id: 'D9',    label: 'D9~',  type: PIN_TYPE.PWM,     x: 136, y:  12, side: 'top' },
-    { id: 'D10',   label: 'D10~', type: PIN_TYPE.PWM,     x: 150, y:  12, side: 'top' },
-    { id: 'D11',   label: 'D11~', type: PIN_TYPE.PWM,     x: 164, y:  12, side: 'top' },
-    { id: 'D12',   label: 'D12',  type: PIN_TYPE.DIGITAL, x: 178, y:  12, side: 'top' },
-    { id: 'D13',   label: 'D13',  type: PIN_TYPE.DIGITAL, x: 192, y:  12, side: 'top' },
-    // Power top
-    { id: 'GND_D', label: 'GND',  type: PIN_TYPE.GND,     x: 206, y:  12, side: 'top' },
-    { id: 'AREF',  label: 'AREF', type: PIN_TYPE.SIGNAL,  x: 220, y:  12, side: 'top' },
-    // Analog pins bottom row (left)
-    { id: 'A0',    label: 'A0',   type: PIN_TYPE.ANALOG,  x:  14, y: 134, side: 'bottom' },
-    { id: 'A1',    label: 'A1',   type: PIN_TYPE.ANALOG,  x:  28, y: 134, side: 'bottom' },
-    { id: 'A2',    label: 'A2',   type: PIN_TYPE.ANALOG,  x:  42, y: 134, side: 'bottom' },
-    { id: 'A3',    label: 'A3',   type: PIN_TYPE.ANALOG,  x:  56, y: 134, side: 'bottom' },
-    { id: 'A4',    label: 'A4',   type: PIN_TYPE.ANALOG,  x:  70, y: 134, side: 'bottom' },
-    { id: 'A5',    label: 'A5',   type: PIN_TYPE.ANALOG,  x:  84, y: 134, side: 'bottom' },
-    // Power bottom (right)
-    { id: 'VIN',   label: 'VIN',  type: PIN_TYPE.POWER,   x: 104, y: 134, side: 'bottom' },
-    { id: 'GND1',  label: 'GND',  type: PIN_TYPE.GND,     x: 118, y: 134, side: 'bottom' },
-    { id: 'GND2',  label: 'GND',  type: PIN_TYPE.GND,     x: 132, y: 134, side: 'bottom' },
-    { id: '5V',    label: '5V',   type: PIN_TYPE.POWER,   x: 146, y: 134, side: 'bottom' },
-    { id: '3V3',   label: '3.3V', type: PIN_TYPE.POWER,   x: 160, y: 134, side: 'bottom' },
-    { id: 'RST',   label: 'RST',  type: PIN_TYPE.SIGNAL,  x: 174, y: 134, side: 'bottom' },
-    // I2C pins on right side
-    { id: 'SDA',   label: 'SDA',  type: PIN_TYPE.SIGNAL,  x: 220, y: 100, side: 'right' },
-    { id: 'SCL',   label: 'SCL',  type: PIN_TYPE.SIGNAL,  x: 220, y: 110, side: 'right' },
-    { id: '5V2',   label: '5V',   type: PIN_TYPE.POWER,   x: 220, y: 120, side: 'right' },
-    { id: 'GND3',  label: 'GND',  type: PIN_TYPE.GND,     x: 220, y: 130, side: 'right' },
+    // ── TOP HEADERS (Right-to-Left: D0 at right, D13 at left, then GND, AREF, SDA, SCL) ──
+    // 10-pin header (top-left / middle): SCL, SDA, AREF, GND, D13..D8
+    { id: 'SCL',   label: 'SCL',  type: PIN_TYPE.SIGNAL,  x:  26, y: 12, side: 'top' },
+    { id: 'SDA',   label: 'SDA',  type: PIN_TYPE.SIGNAL,  x:  37, y: 12, side: 'top' },
+    { id: 'AREF',  label: 'AREF', type: PIN_TYPE.SIGNAL,  x:  48, y: 12, side: 'top' },
+    { id: 'GND_D', label: 'GND',  type: PIN_TYPE.GND,     x:  59, y: 12, side: 'top' },
+    { id: 'D13',   label: '13',   type: PIN_TYPE.DIGITAL, x:  70, y: 12, side: 'top' },
+    { id: 'D12',   label: '12',   type: PIN_TYPE.DIGITAL, x:  81, y: 12, side: 'top' },
+    { id: 'D11',   label: '~11',  type: PIN_TYPE.PWM,     x:  92, y: 12, side: 'top' },
+    { id: 'D10',   label: '~10',  type: PIN_TYPE.PWM,     x: 103, y: 12, side: 'top' },
+    { id: 'D9',    label: '~9',   type: PIN_TYPE.PWM,     x: 114, y: 12, side: 'top' },
+    { id: 'D8',    label: '8',    type: PIN_TYPE.DIGITAL, x: 125, y: 12, side: 'top' },
+    // 8-pin header (top-right): D7..D0 (D0 RX on far right, D1 TX next, etc.)
+    { id: 'D7',    label: '7',    type: PIN_TYPE.DIGITAL, x: 142, y: 12, side: 'top' },
+    { id: 'D6',    label: '~6',   type: PIN_TYPE.PWM,     x: 153, y: 12, side: 'top' },
+    { id: 'D5',    label: '~5',   type: PIN_TYPE.PWM,     x: 164, y: 12, side: 'top' },
+    { id: 'D4',    label: '4',    type: PIN_TYPE.DIGITAL, x: 175, y: 12, side: 'top' },
+    { id: 'D3',    label: '~3',   type: PIN_TYPE.PWM,     x: 186, y: 12, side: 'top' },
+    { id: 'D2',    label: '2',    type: PIN_TYPE.DIGITAL, x: 197, y: 12, side: 'top' },
+    { id: 'D1',    label: '1/TX', type: PIN_TYPE.DIGITAL, x: 208, y: 12, side: 'top' },
+    { id: 'D0',    label: '0/RX', type: PIN_TYPE.DIGITAL, x: 219, y: 12, side: 'top' },
+
+    // ── BOTTOM HEADERS (Power on Left, Analog In on Right) ──
+    // 8-pin POWER header (bottom-left)
+    { id: 'NC',    label: 'NC',   type: PIN_TYPE.SIGNAL,  x:  36, y: 138, side: 'bottom' },
+    { id: 'IOREF', label: 'IOREF',type: PIN_TYPE.POWER,   x:  47, y: 138, side: 'bottom' },
+    { id: 'RST',   label: 'RST',  type: PIN_TYPE.SIGNAL,  x:  58, y: 138, side: 'bottom' },
+    { id: '3V3',   label: '3.3V', type: PIN_TYPE.POWER,   x:  69, y: 138, side: 'bottom' },
+    { id: '5V',    label: '5V',   type: PIN_TYPE.POWER,   x:  80, y: 138, side: 'bottom' },
+    { id: 'GND1',  label: 'GND',  type: PIN_TYPE.GND,     x:  91, y: 138, side: 'bottom' },
+    { id: 'GND2',  label: 'GND',  type: PIN_TYPE.GND,     x: 102, y: 138, side: 'bottom' },
+    { id: 'VIN',   label: 'VIN',  type: PIN_TYPE.POWER,   x: 113, y: 138, side: 'bottom' },
+
+    // 6-pin ANALOG IN header (bottom-right)
+    { id: 'A0',    label: 'A0',   type: PIN_TYPE.ANALOG,  x: 148, y: 138, side: 'bottom' },
+    { id: 'A1',    label: 'A1',   type: PIN_TYPE.ANALOG,  x: 159, y: 138, side: 'bottom' },
+    { id: 'A2',    label: 'A2',   type: PIN_TYPE.ANALOG,  x: 170, y: 138, side: 'bottom' },
+    { id: 'A3',    label: 'A3',   type: PIN_TYPE.ANALOG,  x: 181, y: 138, side: 'bottom' },
+    { id: 'A4',    label: 'A4',   type: PIN_TYPE.ANALOG,  x: 192, y: 138, side: 'bottom' },
+    { id: 'A5',    label: 'A5',   type: PIN_TYPE.ANALOG,  x: 203, y: 138, side: 'bottom' },
+
+    // ── 2x3 ICSP Male Header (Backward compatibility with 5V2 / GND3) ──
+    { id: '5V2',   label: '5V',   type: PIN_TYPE.POWER,   x: 198, y:  71, side: 'right' },
+    { id: 'GND3',  label: 'GND',  type: PIN_TYPE.GND,     x: 198, y:  85, side: 'right' },
   ],
 
   draw(ctx, inst, sim) {
@@ -408,12 +415,13 @@ defComp({
       }
     };
 
-    // ── Local Helper: 3D Female Header Strip ──
-    const drawFemaleHeader = (hx, hy, hw, hh, holes, isVertical = false) => {
+    // ── Local Helper: 3D Female Header Strip (Tinkercad & Wokwi Style) ──
+    const drawFemaleHeader = (hx, hy, hw, hh, holes) => {
       // Base shadow
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
       roundRect(ctx, hx + 1, hy + 1, hw, hh, 2);
       ctx.fill();
+
       // Black plastic housing
       const hGrad = ctx.createLinearGradient(hx, hy, hx, hy + hh);
       hGrad.addColorStop(0, '#2b2b2e');
@@ -427,9 +435,8 @@ defComp({
       ctx.stroke();
 
       // Individual pin sockets
-      for (const pos of holes) {
-        const px = isVertical ? hx + hw / 2 : pos;
-        const py = isVertical ? pos : hy + hh / 2;
+      for (const px of holes) {
+        const py = hy + hh / 2;
 
         // Beveled outer recess
         ctx.fillStyle = '#323236';
@@ -453,7 +460,7 @@ defComp({
     roundRect(ctx, 0, 1.5, W, H, 7);
     ctx.fill();
 
-    // Iconic Arduino Teal Solder Mask
+    // Iconic Arduino Teal Solder Mask (Authentic Italian Petrol Blue)
     const pcbGrad = ctx.createLinearGradient(0, 0, W, H);
     pcbGrad.addColorStop(0, '#00979C');
     pcbGrad.addColorStop(0.5, '#008184');
@@ -466,23 +473,49 @@ defComp({
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // ── 2. Subtle Copper Traces & Vias ──
+    // ── 2. Subtle Copper Traces & Vias (Routing to Authentic Pin Locations) ──
     ctx.strokeStyle = 'rgba(0, 195, 205, 0.16)';
     ctx.lineWidth = 1.1;
-    for (let i = 0; i < 14; i++) {
-      const tx = 10 + i * 14;
+
+    // Top Digital traces from ATmega328P upwards
+    // D8..D13 (left header)
+    const topHolesLeft = [26, 37, 48, 59, 70, 81, 92, 103, 114, 125];
+    for (let i = 4; i < topHolesLeft.length; i++) {
+      const tx = topHolesLeft[i];
       ctx.beginPath();
       ctx.moveTo(tx, 18);
-      ctx.lineTo(tx, 34);
-      ctx.lineTo(74 + i * 5.2, 60);
+      ctx.lineTo(tx, 32);
+      ctx.lineTo(82 + (i - 4) * 8.5, 60);
       ctx.stroke();
     }
-    for (let i = 0; i < 6; i++) {
-      const bx = 14 + i * 14;
+    // D7..D0 (right header)
+    const topHolesRight = [142, 153, 164, 175, 186, 197, 208, 219];
+    for (let i = 0; i < topHolesRight.length; i++) {
+      const tx = topHolesRight[i];
       ctx.beginPath();
-      ctx.moveTo(bx, 128);
-      ctx.lineTo(bx, 114);
-      ctx.lineTo(80 + i * 10, 92);
+      ctx.moveTo(tx, 18);
+      ctx.lineTo(tx, 32);
+      ctx.lineTo(130 + i * 5, 60);
+      ctx.stroke();
+    }
+    // Bottom Analog traces (A0..A5)
+    const analogHoles = [148, 159, 170, 181, 192, 203];
+    for (let i = 0; i < analogHoles.length; i++) {
+      const bx = analogHoles[i];
+      ctx.beginPath();
+      ctx.moveTo(bx, 132);
+      ctx.lineTo(bx, 116);
+      ctx.lineTo(115 + i * 8.5, 96);
+      ctx.stroke();
+    }
+    // Bottom Power traces
+    const powerHoles = [36, 47, 58, 69, 80, 91, 102, 113];
+    for (let i = 2; i < powerHoles.length; i++) {
+      const bx = powerHoles[i];
+      ctx.beginPath();
+      ctx.moveTo(bx, 132);
+      ctx.lineTo(bx, 118);
+      ctx.lineTo(40 + (i - 2) * 10, 100);
       ctx.stroke();
     }
 
@@ -493,10 +526,10 @@ defComp({
     ctx.stroke();
 
     const mountHoles = [
-      { mx: 26,  my: 29 },
-      { mx: 210, my: 34 },
-      { mx: 194, my: 134 },
-      { mx: 30,  my: 116 }
+      { mx: 28,  my: 32 },
+      { mx: 216, my: 34 },
+      { mx: 204, my: 124 },
+      { mx: 28,  my: 118 }
     ];
     for (const mh of mountHoles) {
       // White silkscreen outer ring
@@ -519,7 +552,7 @@ defComp({
 
     // ── 4. USB Type-B Connector (Top-Left Edge) ──
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    roundRect(ctx, -14, 35, 24, 30, 2);
+    roundRect(ctx, -14, 34, 24, 30, 2);
     ctx.fill();
 
     const usbGrad = ctx.createLinearGradient(-15, 34, 10, 64);
@@ -553,7 +586,7 @@ defComp({
 
     // ── 5. DC Power Barrel Jack (Bottom-Left Edge) ──
     ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    roundRect(ctx, -13, 94, 26, 28, 3);
+    roundRect(ctx, -14, 93, 26, 28, 3);
     ctx.fill();
 
     const jackGrad = ctx.createLinearGradient(-14, 93, 12, 121);
@@ -582,29 +615,34 @@ defComp({
     ctx.arc(4, 107, 2, 0, Math.PI * 2);
     ctx.fill();
 
-    // ── 6. Tactile Reset Button (Top-Left Corner) ──
+    // ── 6. Tactile Reset Button (Top-Left, beside USB) ──
     // Metal bracket legs
     ctx.fillStyle = '#d0d5dd';
-    ctx.fillRect(6, 20, 3, 2);
-    ctx.fillRect(19, 20, 3, 2);
-    ctx.fillRect(6, 31, 3, 2);
-    ctx.fillRect(19, 31, 3, 2);
+    ctx.fillRect(10, 19, 3, 2);
+    ctx.fillRect(21, 19, 3, 2);
+    ctx.fillRect(10, 29, 3, 2);
+    ctx.fillRect(21, 29, 3, 2);
     // Metallic switch body
     ctx.fillStyle = '#bfc5ce';
-    roundRect(ctx, 7, 21, 14, 11, 2);
+    roundRect(ctx, 11, 20, 12, 10, 2);
     ctx.fill();
     ctx.strokeStyle = '#666';
     ctx.lineWidth = 0.8;
     ctx.stroke();
-    // Red/Terracotta Reset Actuator
-    const rstGrad = ctx.createRadialGradient(13, 25.5, 0.5, 14, 26.5, 4.5);
+    // Red Reset Actuator
+    const rstGrad = ctx.createRadialGradient(16.5, 24.5, 0.5, 17.5, 25.5, 4);
     rstGrad.addColorStop(0, '#ff7b7b');
     rstGrad.addColorStop(0.6, '#d63031');
     rstGrad.addColorStop(1, '#8c1d1d');
     ctx.fillStyle = rstGrad;
     ctx.beginPath();
-    ctx.arc(14, 26.5, 3.8, 0, Math.PI * 2);
+    ctx.arc(17, 25, 3.4, 0, Math.PI * 2);
     ctx.fill();
+    // RESET silkscreen
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 4px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('RESET', 17, 34);
 
     // ── 7. ATmega16U2 USB-Serial QFN Chip & Polyfuse ──
     // Gold/green SMD Polyfuse
@@ -640,16 +678,16 @@ defComp({
     ctx.fillText('16U2', u2x + u2s / 2, u2y + 9);
 
     // ── 8. 16.000 MHz Metallic Capsule Crystal ──
-    const cx = 44, cy = 72, cw = 22, ch = 10;
+    const cx = 38, cy = 68, cw = 22, ch = 9;
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    roundRect(ctx, cx + 1, cy + 1, cw, ch, 5);
+    roundRect(ctx, cx + 1, cy + 1, cw, ch, 4.5);
     ctx.fill();
     const xtalGrad = ctx.createLinearGradient(cx, cy, cx + cw, cy + ch);
     xtalGrad.addColorStop(0, '#f5f7fa');
     xtalGrad.addColorStop(0.5, '#c3cfe2');
     xtalGrad.addColorStop(1, '#8e9eab');
     ctx.fillStyle = xtalGrad;
-    roundRect(ctx, cx, cy, cw, ch, 5);
+    roundRect(ctx, cx, cy, cw, ch, 4.5);
     ctx.fill();
     ctx.strokeStyle = '#666';
     ctx.lineWidth = 0.8;
@@ -657,16 +695,16 @@ defComp({
     // Inner crystal rim
     ctx.strokeStyle = '#e2e8f0';
     ctx.lineWidth = 0.6;
-    roundRect(ctx, cx + 1.5, cy + 1.5, cw - 3, ch - 3, 3.5);
+    roundRect(ctx, cx + 1.5, cy + 1.5, cw - 3, ch - 3, 3);
     ctx.stroke();
     ctx.fillStyle = '#333';
     ctx.font = 'bold 4.5px JetBrains Mono, monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('16.000', cx + cw / 2, cy + 6.8);
+    ctx.fillText('16.000', cx + cw / 2, cy + 6.2);
 
     // ── 9. Power Section: 5V LDO Regulator, LM358 Op-Amp & Electrolytic Caps ──
     // SOT-223 5V Regulator (left-bottom above barrel jack)
-    const regX = 18, regY = 74;
+    const regX = 18, regY = 72;
     ctx.fillStyle = '#bfc5ce';
     ctx.fillRect(regX + 3, regY - 3, 8, 3.5); // heatsink tab
     for (let i = 0; i < 3; i++) {
@@ -683,7 +721,7 @@ defComp({
     ctx.fillText('1117', regX + 7, regY + 7);
 
     // LM358 SOIC-8 Op-Amp
-    const opX = 50, opY = 48;
+    const opX = 52, opY = 48;
     ctx.fillStyle = '#c4cad0';
     for (let i = 0; i < 4; i++) {
       ctx.fillRect(opX + 1.5 + i * 3, opY - 2, 1.4, 2);
@@ -698,8 +736,8 @@ defComp({
 
     // Dual Electrolytic Capacitors (silver top cans with polarity crescent)
     const caps = [
-      { x: 26, y: 103, r: 6.2, label: '47µ' },
-      { x: 42, y: 103, r: 6.2, label: '47µ' }
+      { x: 24, y: 102, r: 5.8, label: '47µ' },
+      { x: 40, y: 102, r: 5.8, label: '47µ' }
     ];
     for (const c of caps) {
       // Base plastic pad
@@ -719,17 +757,17 @@ defComp({
       ctx.fillStyle = '#1e293b';
       ctx.beginPath();
       ctx.arc(c.x, c.y, c.r, -Math.PI * 0.38, Math.PI * 0.38);
-      ctx. closePath();
+      ctx.closePath();
       ctx.fill();
       // Label
       ctx.fillStyle = '#1e293b';
-      ctx.font = 'bold 4px sans-serif';
+      ctx.font = 'bold 3.8px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(c.label, c.x - 1.5, c.y + 1.5);
     }
 
     // ── 10. ATmega328P-PU in 28-Pin DIP Socket (Board Center-Right) ──
-    const chipX = 74, chipY = 64, chipW = 88, chipH = 30;
+    const chipX = 82, chipY = 64, chipW = 86, chipH = 28;
 
     // Outer DIP Socket base
     ctx.fillStyle = 'rgba(0,0,0,0.4)';
@@ -783,16 +821,16 @@ defComp({
     // Laser-etched IC Markings
     ctx.fillStyle = '#b8bfc6';
     ctx.textAlign = 'center';
-    ctx.font = 'bold 6.5px JetBrains Mono, monospace';
-    ctx.fillText('ATMEGA328P-PU', chipX + chipW / 2 + 2, chipY + 13);
+    ctx.font = 'bold 6.2px JetBrains Mono, monospace';
+    ctx.fillText('ATMEGA328P-PU', chipX + chipW / 2 + 2, chipY + 12.5);
     ctx.fillStyle = '#8b949e';
     ctx.font = '5px JetBrains Mono, monospace';
-    ctx.fillText('MICROCHIP   2634', chipX + chipW / 2 + 2, chipY + 22);
+    ctx.fillText('MICROCHIP   2634', chipX + chipW / 2 + 2, chipY + 21);
 
-    // ── 11. 2x3 ICSP Pin Header (Right of ATmega328P) ──
-    const icspX = 172, icspY = 66;
+    // ── 11. 2x3 ICSP Male Pin Header (Far Right of ATmega328P) ──
+    const icspX = 186, icspY = 64;
     ctx.fillStyle = '#18181b';
-    roundRect(ctx, icspX, icspY, 16, 24, 2);
+    roundRect(ctx, icspX, icspY, 18, 26, 2);
     ctx.fill();
     ctx.strokeStyle = '#3f3f46';
     ctx.lineWidth = 0.8;
@@ -800,8 +838,8 @@ defComp({
 
     for (let row = 0; row < 3; row++) {
       for (let col = 0; col < 2; col++) {
-        const sx = icspX + 4.5 + col * 7;
-        const sy = icspY + 4.5 + row * 7.5;
+        const sx = icspX + 5 + col * 7.5;
+        const sy = icspY + 5 + row * 8;
         ctx.fillStyle = '#d4af37';
         ctx.fillRect(sx - 2, sy - 2, 4, 4);
         ctx.fillStyle = '#fff3b0';
@@ -811,48 +849,48 @@ defComp({
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 4.5px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('ICSP', icspX + 8, icspY - 2.5);
+    ctx.fillText('ICSP', icspX + 9, icspY - 2.5);
     // Pin 1 white dot
     ctx.beginPath();
-    ctx.arc(icspX - 2.5, icspY + 4.5, 1.2, 0, Math.PI * 2);
+    ctx.arc(icspX - 2.5, icspY + 5, 1.2, 0, Math.PI * 2);
     ctx.fill();
 
     // ── 12. Authentic Arduino UNO R3 Silkscreen Branding & Artwork ──
-    // "ARDUINO" + Infinity Logo + Inverted "UNO" Pill
+    // "ARDUINO" + Inverted "UNO" Pill + Infinity Logo
     ctx.fillStyle = '#ffffff';
     ctx.textAlign = 'left';
-    ctx.font = 'bold 9.5px sans-serif';
-    ctx.fillText('ARDUINO', 80, 44);
+    ctx.font = 'bold 9px sans-serif';
+    ctx.fillText('ARDUINO', 76, 44);
 
     // White pill badge for "UNO"
-    roundRect(ctx, 130, 34.5, 28, 11.5, 3);
+    roundRect(ctx, 126, 34.5, 26, 11.5, 3);
     ctx.fill();
     ctx.fillStyle = '#008184';
     ctx.textAlign = 'center';
     ctx.font = 'bold 8px sans-serif';
-    ctx.fillText('UNO', 144, 43.2);
+    ctx.fillText('UNO', 139, 43.2);
 
-    // Classic Arduino InfinityLogo (∞ with - and +)
+    // Classic Arduino Infinity Logo (∞ with - and +)
     ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1.4;
+    ctx.lineWidth = 1.3;
     ctx.beginPath();
-    ctx.arc(167, 40.2, 3.6, 0, Math.PI * 2);
+    ctx.arc(162, 40.2, 3.5, 0, Math.PI * 2);
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(173.8, 40.2, 3.6, 0, Math.PI * 2);
+    ctx.arc(168.8, 40.2, 3.5, 0, Math.PI * 2);
     ctx.stroke();
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 5px sans-serif';
-    ctx.fillText('-', 167, 42);
-    ctx.fillText('+', 173.8, 42);
+    ctx.fillText('-', 162, 42);
+    ctx.fillText('+', 168.8, 42);
 
-    // Section Header Labels (DIGITAL PWM~, ANALOG IN, POWER)
+    // Section Header Labels (DIGITAL PWM~, POWER on left, ANALOG IN on right)
     ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
     ctx.font = 'bold 5px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('DIGITAL (PWM~)', 118, 31);
-    ctx.fillText('ANALOG IN', 49, 113);
-    ctx.fillText('POWER', 139, 113);
+    ctx.fillText('DIGITAL (PWM~)', 148, 29);
+    ctx.fillText('POWER', 75, 121);
+    ctx.fillText('ANALOG IN', 175, 121);
 
     // ── 13. Status LEDs (L, TX, RX, ON) with Live Simulation State ──
     const pStates = (sim && sim.pinStates) || {};
@@ -861,54 +899,48 @@ defComp({
     const ledRX = Boolean(pStates['pin_0']  || pStates['D0']  || (sim && sim.rxActive));
     const ledON = sim ? (sim.running !== false && sim.powered !== false) : true;
 
-    drawSmdLed(62,  38, ledL,  '#ffaa00', 'L',  'bottom');
-    drawSmdLed(62,  52, ledTX, '#ff9900', 'TX', 'bottom');
-    drawSmdLed(74,  52, ledRX, '#ff9900', 'RX', 'bottom');
-    drawSmdLed(185, 52, ledON, '#00ff66', 'ON', 'bottom');
+    // 'L' LED directly under Pin 13 (x=70)
+    drawSmdLed(70,  35, ledL,  '#ffaa00', 'L',  'right');
+    // 'TX' and 'RX' LEDs near 16U2
+    drawSmdLed(48,  44, ledTX, '#ff9900', 'TX', 'left');
+    drawSmdLed(48,  54, ledRX, '#ff9900', 'RX', 'left');
+    // 'ON' power LED
+    drawSmdLed(168, 52, ledON, '#00ff66', 'ON', 'bottom');
 
-    // ── 14. Female Pin Header Strips (Top, Bottom-Left, Bottom-Right, Right I2C) ──
-    const topHoles = [];
-    const analogHoles = [];
-    const powerHoles = [];
-    const i2cHoles = [100, 110, 120, 130];
-
-    for (let i = 0; i < 16; i++) topHoles.push(10 + i * 14);
-    for (let i = 0; i < 6; i++) {
-      analogHoles.push(14 + i * 14);
-      powerHoles.push(104 + i * 14);
-    }
-
-    drawFemaleHeader(4,  6,   222, 12, topHoles,    false);
-    drawFemaleHeader(7,  128, 88,  12, analogHoles, false);
-    drawFemaleHeader(97, 128, 84,  12, powerHoles,  false);
-    drawFemaleHeader(214, 93, 12,  44, i2cHoles,    true);
+    // ── 14. Female Pin Header Strips (Top 10-pin & 8-pin, Bottom Power & Analog) ──
+    drawFemaleHeader(20,  6,   111, 12, topHolesLeft);
+    drawFemaleHeader(136, 6,   89,  12, topHolesRight);
+    drawFemaleHeader(30,  132, 89,  12, powerHoles);
+    drawFemaleHeader(142, 132, 67,  12, analogHoles);
 
     // ── 15. Crisp Silkscreen Pin Labels ──
-    ctx.font = 'bold 4.8px JetBrains Mono, monospace';
+    ctx.font = 'bold 4.6px JetBrains Mono, monospace';
     ctx.textAlign = 'center';
 
     const paintPinLabel = (cx, baseline, text) => {
-      const w = ctx.measureText(text).width + 3.5;
+      const w = ctx.measureText(text).width + 3.2;
       ctx.fillStyle = 'rgba(0, 52, 56, 0.88)';
-      roundRect(ctx, cx - w / 2, baseline - 4.2, w, 6.2, 1.5);
+      roundRect(ctx, cx - w / 2, baseline - 4.2, w, 6, 1.5);
       ctx.fill();
       ctx.fillStyle = '#ffffff';
       ctx.fillText(text, cx, baseline + 0.5);
     };
 
-    const topLabels    = ['D0', 'D1', 'D2', 'D3~', 'D4', 'D5~', 'D6~', 'D7', 'D8', 'D9~', 'D10~', 'D11~', 'D12', 'D13', 'GND', 'AREF'];
-    const analogLabels = ['A0', 'A1', 'A2', 'A3', 'A4', 'A5'];
-    const powerLabels  = ['VIN', 'GND', 'GND', '5V', '3.3V', 'RST'];
-    const i2cLabels    = ['SDA', 'SCL', '5V', 'GND'];
+    // Top headers: 10-pin on left (SCL..D8), 8-pin on right (D7..D0)
+    const topLabelsLeft  = ['SCL', 'SDA', 'AREF', 'GND', '13', '12', '~11', '~10', '~9', '8'];
+    const topLabelsRight = ['7', '~6', '~5', '4', '~3', '2', 'TX 1', 'RX 0'];
+    // Bottom headers: Power on left, Analog In on right
+    const powerLabels    = ['NC', 'IOREF', 'RESET', '3.3V', '5V', 'GND', 'GND', 'VIN'];
+    const analogLabels   = ['A0', 'A1', 'A2', 'A3', 'A4', 'A5'];
 
-    for (let i = 0; i < 16; i++) paintPinLabel(topHoles[i], 23.5, topLabels[i]);
-    for (let i = 0; i < 6; i++)  paintPinLabel(analogHoles[i], 123, analogLabels[i]);
-    for (let i = 0; i < 6; i++)  paintPinLabel(powerHoles[i], 123, powerLabels[i]);
-    for (let i = 0; i < 4; i++)  paintPinLabel(202, i2cHoles[i] + 1.5, i2cLabels[i]);
+    for (let i = 0; i < topHolesLeft.length; i++)  paintPinLabel(topHolesLeft[i], 23.5, topLabelsLeft[i]);
+    for (let i = 0; i < topHolesRight.length; i++) paintPinLabel(topHolesRight[i], 23.5, topLabelsRight[i]);
+    for (let i = 0; i < powerHoles.length; i++)     paintPinLabel(powerHoles[i], 127, powerLabels[i]);
+    for (let i = 0; i < analogHoles.length; i++)    paintPinLabel(analogHoles[i], 127, analogLabels[i]);
 
     // Vertical "MADE IN ITALY" along right edge
     ctx.save();
-    ctx.translate(221, 34);
+    ctx.translate(225, 34);
     ctx.rotate(Math.PI / 2);
     ctx.font = 'bold 4.2px sans-serif';
     ctx.textAlign = 'left';

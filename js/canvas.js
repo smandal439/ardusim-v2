@@ -3110,7 +3110,7 @@ class CircuitCanvas {
   _pinToNumber(pinId) {
     const plcMap = { I0_0: 2, I0_1: 3, I0_2: 4, I0_3: 5, Q0_0: 8, Q0_1: 9, Q0_2: 10, Q0_3: 11 };
     if (pinId in plcMap) return plcMap[pinId];
-    const analogMap = { A0: 14, A1: 15, A2: 16, A3: 17, A4: 18, A5: 19, A6: 20, A7: 21 };
+    const analogMap = { A0: 14, A1: 15, A2: 16, A3: 17, A4: 18, A5: 19, A6: 20, A7: 21, SDA: 18, SCL: 19 };
     if (pinId in analogMap) return analogMap[pinId];
     // ESP32 DevKit V1 pin aliases
     const esp32Map = { VP: 36, VN: 39, TX0: 1, RX0: 3, EN: 0 };
@@ -5382,9 +5382,9 @@ class CircuitCanvas {
       // 1. Arduino Uno / Nano Pins
       if (inst.type === 'arduino_uno' || inst.type === 'arduino_nano') {
         const pinId = current.pinId;
-        if (pinId === 'GND1' || pinId === 'GND2' || pinId === 'GND_D' || pinId === 'GND') {
+        if (pinId === 'GND1' || pinId === 'GND2' || pinId === 'GND_D' || pinId === 'GND' || pinId === 'GND3') {
           grounds.push({ type: 'gnd', instId: inst.id, pinId, resistance: current.resistance });
-        } else if (pinId === '5V' || pinId === 'VIN' || pinId === '5V2') {
+        } else if (pinId === '5V' || pinId === 'VIN' || pinId === '5V2' || pinId === 'IOREF') {
           sources.push({ type: '5v', voltage: 5.0, rawVal: 255, resistance: current.resistance });
         } else if (pinId === '3V3') {
           sources.push({ type: '3v3', voltage: 3.3, rawVal: 168, resistance: current.resistance });
@@ -5820,7 +5820,7 @@ class CircuitCanvas {
   _isGroundPin(inst, pinId) {
     if (inst.type === 'industrial_plc') return pinId === 'COM';
     if (inst.type === 'arduino_uno' || inst.type === 'arduino_nano') {
-      return pinId === 'GND1' || pinId === 'GND2' || pinId === 'GND_D' || pinId === 'GND';
+      return pinId === 'GND1' || pinId === 'GND2' || pinId === 'GND_D' || pinId === 'GND' || pinId === 'GND3';
     }
     if (inst.type === 'esp32_devkit_v1') {
       return pinId === 'GND1' || pinId === 'GND2' || pinId === 'GND';
