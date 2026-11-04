@@ -1120,7 +1120,18 @@ void loop() {
     };
 
     this.sim.onWebPage = (resp) => {
-      if (this.webBrowser) this.webBrowser.render(resp);
+      if (this.webBrowser) {
+        this.webBrowser.render(resp);
+        if (!this._webTabAutoOpened) {
+          this._webTabAutoOpened = true;
+          const webTabBtn = document.getElementById('tab-webbrowser');
+          if (webTabBtn) this._switchBottomTab(webTabBtn);
+          const bottomPanel = document.getElementById('bottom-panel');
+          if (bottomPanel && bottomPanel.classList.contains('collapsed')) {
+            bottomPanel.classList.remove('collapsed');
+          }
+        }
+      }
     };
 
     this.sim.onWebNavigate = (path) => {
@@ -1530,6 +1541,7 @@ void loop() {
   }
 
   async run() {
+    this._webTabAutoOpened = false;
     if (!this.editor) return;
     let code;
     try {
@@ -1623,6 +1635,10 @@ void loop() {
   }
 
   stop() {
+    this._webTabAutoOpened = false;
+    if (this.webBrowser && typeof this.webBrowser.stopTimers === 'function') {
+      this.webBrowser.stopTimers();
+    }
     const wasRunning = this.isRunning;
     this._runEpoch++;
     this.sim.stop();

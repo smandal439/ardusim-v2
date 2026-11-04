@@ -1278,6 +1278,65 @@ class ArduinoSimulator {
         analogReadResolution(bits) { },
         analogWriteResolution(bits) { },
 
+        /* Standard Arduino Math & Bit Utilities */
+        map(x, in_min, in_max, out_min, out_max) {
+          x = Number(x) || 0;
+          in_min = Number(in_min) || 0;
+          in_max = Number(in_max) || 0;
+          out_min = Number(out_min) || 0;
+          out_max = Number(out_max) || 0;
+          if (in_max === in_min) return out_min;
+          return ((x - in_min) * (out_max - out_min)) / (in_max - in_min) + out_min;
+        },
+        constrain(x, a, b) {
+          x = Number(x) || 0;
+          a = Number(a) || 0;
+          b = Number(b) || 0;
+          return Math.max(a, Math.min(b, x));
+        },
+        min(a, b) {
+          return Math.min(Number(a) || 0, Number(b) || 0);
+        },
+        max(a, b) {
+          return Math.max(Number(a) || 0, Number(b) || 0);
+        },
+        random(min, max) {
+          if (max === undefined) {
+            max = min;
+            min = 0;
+          }
+          min = Number(min) || 0;
+          max = Number(max) || 0;
+          if (min >= max) return min;
+          return Math.floor(Math.random() * (max - min)) + min;
+        },
+        randomSeed(_seed) { },
+        bitRead(value, bit) {
+          return (Number(value) >> Number(bit)) & 1;
+        },
+        bitWrite(value, bit, bitvalue) {
+          return bitvalue ? (Number(value) | (1 << Number(bit))) : (Number(value) & ~(1 << Number(bit)));
+        },
+        bitSet(value, bit) {
+          return Number(value) | (1 << Number(bit));
+        },
+        bitClear(value, bit) {
+          return Number(value) & ~(1 << Number(bit));
+        },
+        bit(b) {
+          return 1 << Number(b);
+        },
+        lowByte(w) {
+          return Number(w) & 0xff;
+        },
+        highByte(w) {
+          return (Number(w) >> 8) & 0xff;
+        },
+        sq(x) {
+          const n = Number(x) || 0;
+          return n * n;
+        },
+
       },
 
       /* Global constants */
@@ -2334,6 +2393,7 @@ class ArduinoSimulator {
     this._i2sNextAudioTime = 0;
     this._runSeq++;
     if (this._fpsInterval) { clearInterval(this._fpsInterval); this._fpsInterval = null; }
+    if (this._webRefreshDebounce) { clearTimeout(this._webRefreshDebounce); this._webRefreshDebounce = null; }
     // Close any live MQTT connections
     for (const c of this._mqttOpen) {
       try { c.end(true); } catch (e) { /* noop */ }
@@ -2772,6 +2832,20 @@ class ArduinoSimulator {
     if (this.onWebNavigate) this.onWebNavigate(path);
   }
 
+  _onInteractiveInputChanged(inst, field, val) {
+    if (this._web && typeof this._web._triggerRoute === 'function') {
+      if (this._webRefreshDebounce) clearTimeout(this._webRefreshDebounce);
+      this._webRefreshDebounce = setTimeout(() => {
+        if (this._web && typeof this._web._triggerRoute === 'function') {
+          const app = window.App;
+          const wb = app && app.webBrowser;
+          const url = (wb && wb._lastUrl) || '/';
+          this._web._triggerRoute(url);
+        }
+      }, 80);
+    }
+  }
+
   /* Get human-readable pin name */
   static pinLabel(key) {
     if (!key.startsWith('pin_')) return key;
@@ -2839,6 +2913,15 @@ class ArduinoSimulator {
       ic_74hc164: ['Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6', 'Q7'],
       ic_74hc4017: ['Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6', 'Q7', 'Q8', 'Q9', 'Q59'],
       lm741: ['OUT'],
+      lm358: ['1OUT', '2OUT'],
+      lm393: ['1OUT', '2OUT'],
+      lm324: ['1OUT', '2OUT', '3OUT', '4OUT'],
+      cd4066: ['SIG1B', 'SIG2B', 'SIG3B', 'SIG4B'],
+      ic_74hc14: ['Y1', 'Y2', 'Y3', 'Y4', 'Y5', 'Y6'],
+      ic_74hc283: ['S1', 'S2', 'S3', 'S4', 'C4'],
+      ic_74hc85: ['QA_GT_B', 'QA_EQ_B', 'QA_LT_B'],
+      ic_74hc151: ['Y', 'W'],
+      ic_74hc76: ['1Q', '1Qn', '2Q', '2Qn'],
       ic_8255: ['PA0','PA1','PA2','PA3','PA4','PA5','PA6','PA7',
                 'PB0','PB1','PB2','PB3','PB4','PB5','PB6','PB7',
                 'PC0','PC1','PC2','PC3','PC4','PC5','PC6','PC7'],
@@ -2925,6 +3008,9 @@ class ArduinoSimulator {
         if (IC_OUT[other.type] && IC_OUT[other.type].includes(far.pinId)) {
           if (other.type === 'lm741') {
             return other.runtimeState ? (other.runtimeState.vOut || 0) : 0;
+          }
+          if (other.type === 'lm358' || other.type === 'lm324') {
+            return other.runtimeState ? (other.runtimeState[far.pinId] || 0) : 0;
           }
           const raw = other.runtimeState && other.runtimeState[far.pinId] != null
             ? other.runtimeState[far.pinId] : 0;

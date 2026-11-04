@@ -52,6 +52,15 @@ const IC_OUTPUT_MAP = {
     activeLow: [],
   },
   lm741: { pins: ['OUT'], activeLow: [] },
+  lm358: { pins: ['1OUT', '2OUT'], activeLow: [] },
+  lm393: { pins: ['1OUT', '2OUT'], activeLow: [] },
+  lm324: { pins: ['1OUT', '2OUT', '3OUT', '4OUT'], activeLow: [] },
+  cd4066: { pins: ['SIG1B', 'SIG2B', 'SIG3B', 'SIG4B'], activeLow: [] },
+  ic_74hc14: { pins: ['Y1', 'Y2', 'Y3', 'Y4', 'Y5', 'Y6'], activeLow: [] },
+  ic_74hc283: { pins: ['S1', 'S2', 'S3', 'S4', 'C4'], activeLow: [] },
+  ic_74hc85: { pins: ['QA_GT_B', 'QA_EQ_B', 'QA_LT_B'], activeLow: [] },
+  ic_74hc151: { pins: ['Y', 'W'], activeLow: ['W'] },
+  ic_74hc76: { pins: ['1Q', '1Qn', '2Q', '2Qn'], activeLow: ['1Qn', '2Qn'] },
   ic_8255: {
     pins: ['PA0','PA1','PA2','PA3','PA4','PA5','PA6','PA7',
            'PB0','PB1','PB2','PB3','PB4','PB5','PB6','PB7',
@@ -81,6 +90,15 @@ const IC_OUTPUT_PIN_LIST = {
   ic_74hc164: ['Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6', 'Q7'],
   ic_74hc4017: ['Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6', 'Q7', 'Q8', 'Q9', 'Q59'],
   lm741: ['OUT'],
+  lm358: ['1OUT', '2OUT'],
+  lm393: ['1OUT', '2OUT'],
+  lm324: ['1OUT', '2OUT', '3OUT', '4OUT'],
+  cd4066: ['SIG1B', 'SIG2B', 'SIG3B', 'SIG4B'],
+  ic_74hc14: ['Y1', 'Y2', 'Y3', 'Y4', 'Y5', 'Y6'],
+  ic_74hc283: ['S1', 'S2', 'S3', 'S4', 'C4'],
+  ic_74hc85: ['QA_GT_B', 'QA_EQ_B', 'QA_LT_B'],
+  ic_74hc151: ['Y', 'W'],
+  ic_74hc76: ['1Q', '1Qn', '2Q', '2Qn'],
   ic_8255: ['PA0','PA1','PA2','PA3','PA4','PA5','PA6','PA7',
             'PB0','PB1','PB2','PB3','PB4','PB5','PB6','PB7',
             'PC0','PC1','PC2','PC3','PC4','PC5','PC6','PC7'],
@@ -1158,7 +1176,7 @@ class CircuitCanvas {
       props[field] = next;
     };
 
-    const waveOpts = ['sine', 'square', 'triangle', 'sawtooth', 'noise'];
+    const waveOpts = ['sine', 'square', 'triangle', 'sawtooth', 'ramp_down', 'pulse', 'exp_rise', 'ecg', 'staircase', 'noise', 'dc'];
 
     const freqSteps = [1, 10, 100, 1000, 10000, 100000, 1000000];
     const shiftFreq = (field, dir) => {
@@ -1181,6 +1199,35 @@ class CircuitCanvas {
     };
 
     switch (key) {
+      case 'ch1Out': {
+        const cur = rs.ch1_en !== undefined ? rs.ch1_en : (props.ch1_en ?? 1);
+        const next = (cur === 0 || cur === '0' || cur === false) ? 1 : 0;
+        rs.ch1_en = next;
+        props.ch1_en = next;
+        break;
+      }
+      case 'ch2Out': {
+        const cur = rs.ch2_en !== undefined ? rs.ch2_en : (props.ch2_en ?? 1);
+        const next = (cur === 0 || cur === '0' || cur === false) ? 1 : 0;
+        rs.ch2_en = next;
+        props.ch2_en = next;
+        break;
+      }
+      case 'chSync': {
+        const syncOpts = ['off', 'freq_track', 'phase_sync'];
+        cycleOptions('ch_sync', syncOpts);
+        break;
+      }
+      case 'ch1Mod': {
+        const modOpts = ['none', 'am', 'fm', 'sweep'];
+        cycleOptions('ch1_mod', modOpts);
+        break;
+      }
+      case 'ch2Mod': {
+        const modOpts = ['none', 'am', 'fm', 'sweep'];
+        cycleOptions('ch2_mod', modOpts);
+        break;
+      }
       case 'ch1Wave': {
         cycleOptions('ch1_wave', waveOpts);
         break;
@@ -1305,7 +1352,13 @@ class CircuitCanvas {
     if (ctrl.type === 'toggle') {
       inst.runtimeState = inst.runtimeState || {};
       const cur = Number(inst.runtimeState[ctrl.field] ?? inst.props?.[ctrl.field] ?? ctrl.min);
-      inst.runtimeState[ctrl.field] = cur > 0 ? ctrl.min : ctrl.max;
+      const val = cur > 0 ? ctrl.min : ctrl.max;
+      inst.runtimeState[ctrl.field] = val;
+      inst.props = inst.props || {};
+      inst.props[ctrl.field] = val;
+      if (typeof this._onInteractiveInputChanged === 'function') {
+        this._onInteractiveInputChanged(inst, ctrl.field, val);
+      }
       return;
     }
 
@@ -1314,10 +1367,64 @@ class CircuitCanvas {
     let value = _canvasSliderValue(pct, ctrl.min, ctrl.max, ctrl.scale);
     if (ctrl.step) value = Math.round(value / ctrl.step) * ctrl.step;
     value = Math.max(ctrl.min, Math.min(ctrl.max, value));
+    if (!ctrl.step || Number.isInteger(ctrl.step)) value = Math.round(value);
     inst.runtimeState = inst.runtimeState || {};
     inst.runtimeState[ctrl.field] = value;
+    inst.props = inst.props || {};
+    inst.props[ctrl.field] = value;
     if (inst.type === 'battery' && ctrl.field === 'voltage' && typeof window.batterySeedSoc === 'function') {
       window.batterySeedSoc(inst);
+    }
+    if (typeof this._onInteractiveInputChanged === 'function') {
+      this._onInteractiveInputChanged(inst, ctrl.field, value);
+    }
+  }
+
+  _onWheelSlider(sliderHit, deltaY) {
+    const { inst, ctrl } = sliderHit;
+    if (!inst || !ctrl) return;
+    const min = Number(ctrl.min ?? 0);
+    const max = Number(ctrl.max ?? 1023);
+    const range = max - min;
+    const defaultStep = range > 500 ? 25 : (range > 100 ? 5 : (range > 10 ? 1 : 0.1));
+    const step = ctrl.step ? Math.max(ctrl.step, defaultStep) : defaultStep;
+    const dir = deltaY < 0 ? 1 : -1;
+
+    inst.runtimeState = inst.runtimeState || {};
+    const curVal = Number(inst.runtimeState[ctrl.field] ?? inst.props?.[ctrl.field] ?? min);
+    let nextVal = curVal + dir * step;
+    if (ctrl.step) {
+      nextVal = Math.round(nextVal / ctrl.step) * ctrl.step;
+    }
+    nextVal = Math.max(min, Math.min(max, nextVal));
+    if (!ctrl.step || Number.isInteger(ctrl.step)) {
+      nextVal = Math.round(nextVal);
+    }
+
+    inst.runtimeState[ctrl.field] = nextVal;
+    inst.props = inst.props || {};
+    inst.props[ctrl.field] = nextVal;
+
+    if (inst.type === 'battery' && ctrl.field === 'voltage' && typeof window.batterySeedSoc === 'function') {
+      window.batterySeedSoc(inst);
+    }
+
+    if (typeof this._onInteractiveInputChanged === 'function') {
+      this._onInteractiveInputChanged(inst, ctrl.field, nextVal);
+    }
+    this.render();
+  }
+
+  _onInteractiveInputChanged(inst, field, val) {
+    const sim = window.ArduinoSim || (window.App && window.App.sim);
+    if (sim && typeof sim._onInteractiveInputChanged === 'function') {
+      sim._onInteractiveInputChanged(inst, field, val);
+    }
+    if (window.App && typeof window.App._onInteractiveInputChanged === 'function') {
+      window.App._onInteractiveInputChanged(inst, field, val);
+    }
+    if (typeof this.onInputChanged === 'function') {
+      this.onInputChanged(inst, field, val);
     }
   }
 
@@ -2714,12 +2821,35 @@ class CircuitCanvas {
 
   _onWheel(e) {
     e.preventDefault();
-    const factor = e.deltaY < 0 ? 1.1 : 0.9;
     const rect = this.canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
+    const world = this._toWorld(mx, my);
 
-    // Zoom around mouse position
+    // 1. Check if hovering over an interactive slider
+    const sliderHit = this._hitTestSlider(world.x, world.y);
+    if (sliderHit) {
+      this._onWheelSlider(sliderHit, e.deltaY);
+      return;
+    }
+
+    // 2. Check if hovering over a component body that has an interactive value (e.g. potentiometer dial)
+    const comp = this._hitTestComp(world.x, world.y);
+    if (comp) {
+      const defs = window.ArduinoComponents && window.ArduinoComponents.COMPONENT_DEFS;
+      const def = defs && defs[comp.type];
+      if (def && Array.isArray(def.interactive) && def.interactive.length > 0) {
+        const ctrl = def.interactive.find(c => (!c.type || c.type === 'range') && c.field === 'value')
+          || def.interactive.find(c => (!c.type || c.type === 'range'));
+        if (ctrl) {
+          this._onWheelSlider({ inst: comp, ctrl, rect: null }, e.deltaY);
+          return;
+        }
+      }
+    }
+
+    // Default: zoom around mouse position
+    const factor = e.deltaY < 0 ? 1.1 : 0.9;
     this.panX -= (mx - this.panX) * (factor - 1);
     this.panY -= (my - this.panY) * (factor - 1);
     this.zoom = Math.max(0.1, Math.min(4, this.zoom * factor));
@@ -4544,6 +4674,259 @@ class CircuitCanvas {
           break;
         }
 
+        case 'lm358': {
+          const sim = window.ArduinoSim;
+          const ps = (sim && sim.pinStates) || {};
+          const readV = (pid) => {
+            const pn = this._getConnectedPinNum(inst.id, pid);
+            if (pn !== null) return ((ps[`pin_${pn}`] || 0) / 1023.0) * 5.0;
+            const target = this._getWireTarget(inst.id, pid);
+            if (target) {
+              const o = target.inst;
+              if (o.type === 'potentiometer' && target.pinId === 'wiper') return ((o.runtimeState?.wiper || 0) / 1023) * 5.0;
+              if (o.type === 'power_5v') return 5.0;
+              if (o.type === 'power_gnd') return 0;
+              if (o.runtimeState?.[target.pinId] != null) return o.runtimeState[target.pinId];
+            }
+            return 0;
+          };
+          inst.runtimeState = inst.runtimeState || {};
+          const diff1 = readV('1IN+') - readV('1IN-');
+          const v1 = Math.max(0, Math.min(5.0, diff1 * 100000));
+          inst.runtimeState['1OUT'] = v1;
+          const p1 = this._getConnectedPinNum(inst.id, '1OUT');
+          if (p1 !== null) ps[`pin_${p1}`] = Math.round((v1 / 5.0) * 1023);
+
+          const diff2 = readV('2IN+') - readV('2IN-');
+          const v2 = Math.max(0, Math.min(5.0, diff2 * 100000));
+          inst.runtimeState['2OUT'] = v2;
+          const p2 = this._getConnectedPinNum(inst.id, '2OUT');
+          if (p2 !== null) ps[`pin_${p2}`] = Math.round((v2 / 5.0) * 1023);
+          break;
+        }
+
+        case 'lm393': {
+          const sim = window.ArduinoSim;
+          const ps = (sim && sim.pinStates) || {};
+          const readV = (pid) => {
+            const pn = this._getConnectedPinNum(inst.id, pid);
+            if (pn !== null) return ((ps[`pin_${pn}`] || 0) / 1023.0) * 5.0;
+            const target = this._getWireTarget(inst.id, pid);
+            if (target) {
+              const o = target.inst;
+              if (o.type === 'potentiometer' && target.pinId === 'wiper') return ((o.runtimeState?.wiper || 0) / 1023) * 5.0;
+              if (o.type === 'power_5v') return 5.0;
+              if (o.type === 'power_gnd') return 0;
+              if (o.runtimeState?.[target.pinId] != null) return o.runtimeState[target.pinId];
+            }
+            return 0;
+          };
+          inst.runtimeState = inst.runtimeState || {};
+          const out1 = readV('1IN+') > readV('1IN-') ? 255 : 0;
+          inst.runtimeState['1OUT'] = out1;
+          const p1 = this._getConnectedPinNum(inst.id, '1OUT');
+          if (p1 !== null) ps[`pin_${p1}`] = out1;
+
+          const out2 = readV('2IN+') > readV('2IN-') ? 255 : 0;
+          inst.runtimeState['2OUT'] = out2;
+          const p2 = this._getConnectedPinNum(inst.id, '2OUT');
+          if (p2 !== null) ps[`pin_${p2}`] = out2;
+          break;
+        }
+
+        case 'lm324': {
+          const sim = window.ArduinoSim;
+          const ps = (sim && sim.pinStates) || {};
+          const readV = (pid) => {
+            const pn = this._getConnectedPinNum(inst.id, pid);
+            if (pn !== null) return ((ps[`pin_${pn}`] || 0) / 1023.0) * 5.0;
+            const target = this._getWireTarget(inst.id, pid);
+            if (target) {
+              const o = target.inst;
+              if (o.type === 'potentiometer' && target.pinId === 'wiper') return ((o.runtimeState?.wiper || 0) / 1023) * 5.0;
+              if (o.type === 'power_5v') return 5.0;
+              if (o.type === 'power_gnd') return 0;
+              if (o.runtimeState?.[target.pinId] != null) return o.runtimeState[target.pinId];
+            }
+            return 0;
+          };
+          inst.runtimeState = inst.runtimeState || {};
+          const pairs = [
+            ['1IN+', '1IN-', '1OUT'],
+            ['2IN+', '2IN-', '2OUT'],
+            ['3IN+', '3IN-', '3OUT'],
+            ['4IN+', '4IN-', '4OUT']
+          ];
+          for (const [inp, inn, out] of pairs) {
+            const diff = readV(inp) - readV(inn);
+            const v = Math.max(0, Math.min(5.0, diff * 100000));
+            inst.runtimeState[out] = v;
+            const pn = this._getConnectedPinNum(inst.id, out);
+            if (pn !== null) ps[`pin_${pn}`] = Math.round((v / 5.0) * 1023);
+          }
+          break;
+        }
+
+        case 'cd4066': {
+          const sim = window.ArduinoSim;
+          const ps = (sim && sim.pinStates) || {};
+          const readSig = (pid) => {
+            const pn = this._getConnectedPinNum(inst.id, pid);
+            if (pn !== null) return (ps[`pin_${pn}`] || 0);
+            const target = this._getWireTarget(inst.id, pid);
+            if (target) {
+              const o = target.inst;
+              if (o.type === 'power_5v') return 255;
+              if (o.type === 'power_gnd') return 0;
+              if (o.runtimeState?.[target.pinId] != null) return o.runtimeState[target.pinId];
+            }
+            return 0;
+          };
+          inst.runtimeState = inst.runtimeState || {};
+          const switches = [
+            ['CTL1', 'SIG1A', 'SIG1B'],
+            ['CTL2', 'SIG2A', 'SIG2B'],
+            ['CTL3', 'SIG3A', 'SIG3B'],
+            ['CTL4', 'SIG4A', 'SIG4B']
+          ];
+          for (const [ctl, sigA, sigB] of switches) {
+            const ctlVal = this._readDigitalInput(inst.id, ctl);
+            const val = ctlVal ? readSig(sigA) : 0;
+            inst.runtimeState[sigB] = val;
+            const pn = this._getConnectedPinNum(inst.id, sigB);
+            if (pn !== null) ps[`pin_${pn}`] = val;
+          }
+          break;
+        }
+
+        case 'ic_74hc14': {
+          const read = (id) => this._readDigitalInput(inst.id, id);
+          const write = (id, val) => this._writeDigitalOutput(inst.id, id, val);
+          inst.runtimeState = inst.runtimeState || {};
+          const gates = [['A1', 'Y1'], ['A2', 'Y2'], ['A3', 'Y3'], ['A4', 'Y4'], ['A5', 'Y5'], ['A6', 'Y6']];
+          for (const [inPin, outPin] of gates) {
+            const outVal = read(inPin) ? 0 : 1;
+            write(outPin, outVal);
+            inst.runtimeState[outPin] = outVal ? 255 : 0;
+          }
+          break;
+        }
+
+        case 'ic_74hc283': {
+          const read = (id) => this._readDigitalInput(inst.id, id);
+          const write = (id, val) => this._writeDigitalOutput(inst.id, id, val);
+          inst.runtimeState = inst.runtimeState || {};
+          const a = (read('A1') ? 1 : 0) | ((read('A2') ? 1 : 0) << 1) | ((read('A3') ? 1 : 0) << 2) | ((read('A4') ? 1 : 0) << 3);
+          const b = (read('B1') ? 1 : 0) | ((read('B2') ? 1 : 0) << 1) | ((read('B3') ? 1 : 0) << 2) | ((read('B4') ? 1 : 0) << 3);
+          const c0 = read('C0') ? 1 : 0;
+          const sum = a + b + c0;
+          const s1 = sum & 1;
+          const s2 = (sum >> 1) & 1;
+          const s3 = (sum >> 2) & 1;
+          const s4 = (sum >> 3) & 1;
+          const c4 = (sum >> 4) & 1;
+          write('S1', s1); inst.runtimeState['S1'] = s1 ? 255 : 0;
+          write('S2', s2); inst.runtimeState['S2'] = s2 ? 255 : 0;
+          write('S3', s3); inst.runtimeState['S3'] = s3 ? 255 : 0;
+          write('S4', s4); inst.runtimeState['S4'] = s4 ? 255 : 0;
+          write('C4', c4); inst.runtimeState['C4'] = c4 ? 255 : 0;
+          inst.runtimeState.sum = sum & 0x0F;
+          break;
+        }
+
+        case 'ic_74hc85': {
+          const read = (id) => this._readDigitalInput(inst.id, id);
+          const write = (id, val) => this._writeDigitalOutput(inst.id, id, val);
+          inst.runtimeState = inst.runtimeState || {};
+          const a = (read('A0') ? 1 : 0) | ((read('A1') ? 1 : 0) << 1) | ((read('A2') ? 1 : 0) << 2) | ((read('A3') ? 1 : 0) << 3);
+          const b = (read('B0') ? 1 : 0) | ((read('B1') ? 1 : 0) << 1) | ((read('B2') ? 1 : 0) << 2) | ((read('B3') ? 1 : 0) << 3);
+          const iG = read('I_AGT_B');
+          const iL = read('I_ALT_B');
+          const iE = read('I_AEQ_B');
+          let oG = 0, oL = 0, oE = 0;
+          if (a > b) {
+            oG = 1;
+          } else if (a < b) {
+            oL = 1;
+          } else {
+            // Cascaded
+            if (iE || (!iG && !iL)) oE = 1;
+            else if (iG && !iL) oG = 1;
+            else if (iL && !iG) oL = 1;
+          }
+          write('QA_GT_B', oG); inst.runtimeState['QA_GT_B'] = oG ? 255 : 0;
+          write('QA_EQ_B', oE); inst.runtimeState['QA_EQ_B'] = oE ? 255 : 0;
+          write('QA_LT_B', oL); inst.runtimeState['QA_LT_B'] = oL ? 255 : 0;
+          break;
+        }
+
+        case 'ic_74hc151': {
+          const read = (id) => this._readDigitalInput(inst.id, id);
+          const write = (id, val) => this._writeDigitalOutput(inst.id, id, val);
+          inst.runtimeState = inst.runtimeState || {};
+          const g = read('G'); // active LOW strobe
+          if (g) {
+            write('Y', 0); inst.runtimeState['Y'] = 0;
+            write('W', 1); inst.runtimeState['W'] = 255;
+          } else {
+            const s = (read('A') ? 1 : 0) | ((read('B') ? 1 : 0) << 1) | ((read('C') ? 1 : 0) << 2);
+            const d = read(`D${s}`) ? 1 : 0;
+            write('Y', d); inst.runtimeState['Y'] = d ? 255 : 0;
+            write('W', d ? 0 : 1); inst.runtimeState['W'] = d ? 0 : 255;
+          }
+          break;
+        }
+
+        case 'ic_74hc76': {
+          const read = (id) => this._readDigitalInput(inst.id, id);
+          const write = (id, val) => this._writeDigitalOutput(inst.id, id, val);
+          inst.runtimeState = inst.runtimeState || {};
+          const rs = inst.runtimeState;
+          if (rs.q1 === undefined) rs.q1 = 0;
+          if (rs.q2 === undefined) rs.q2 = 0;
+
+          // Channel 1
+          const pre1 = read('1PRE'); // active LOW
+          const clr1 = read('1CLR'); // active LOW
+          const clk1 = read('1CLK');
+          const prevClk1 = rs.prevClk1 ?? 1;
+          rs.prevClk1 = clk1;
+
+          if (!pre1 && clr1) rs.q1 = 1;
+          else if (pre1 && !clr1) rs.q1 = 0;
+          else if (!pre1 && !clr1) rs.q1 = 1;
+          else if (prevClk1 === 1 && clk1 === 0) { // falling edge
+            const j1 = read('1J') ? 1 : 0;
+            const k1 = read('1K') ? 1 : 0;
+            if (j1 && !k1) rs.q1 = 1;
+            else if (!j1 && k1) rs.q1 = 0;
+            else if (j1 && k1) rs.q1 = rs.q1 ? 0 : 1;
+          }
+          write('1Q', rs.q1); inst.runtimeState['1Q'] = rs.q1 ? 255 : 0;
+          write('1Qn', rs.q1 ? 0 : 1); inst.runtimeState['1Qn'] = rs.q1 ? 0 : 255;
+
+          // Channel 2
+          const pre2 = read('2PRE');
+          const clr2 = read('2CLR');
+          const clk2 = read('2CLK');
+          const prevClk2 = rs.prevClk2 ?? 1;
+          rs.prevClk2 = clk2;
+
+          if (!pre2 && clr2) rs.q2 = 1;
+          else if (pre2 && !clr2) rs.q2 = 0;
+          else if (!pre2 && !clr2) rs.q2 = 1;
+          else if (prevClk2 === 1 && clk2 === 0) { // falling edge
+            const j2 = read('2J') ? 1 : 0;
+            const k2 = read('2K') ? 1 : 0;
+            if (j2 && !k2) rs.q2 = 1;
+            else if (!j2 && k2) rs.q2 = 0;
+            else if (j2 && k2) rs.q2 = rs.q2 ? 0 : 1;
+          }
+          write('2Q', rs.q2); inst.runtimeState['2Q'] = rs.q2 ? 255 : 0;
+          write('2Qn', rs.q2 ? 0 : 1); inst.runtimeState['2Qn'] = rs.q2 ? 0 : 255;
+          break;
+        }
+
         /* â”€â”€ MPU6050 IMU (I2C sensor — writes accel values to pin states) â”€â”€ */
         case 'mpu6050': {
           const sim = window.ArduinoSim;
@@ -4887,31 +5270,10 @@ class CircuitCanvas {
 
         /* ------ Dual Channel Function Generator — outputs voltage waveforms ------ */
         case 'func_gen': {
-          const props = inst.props || {};
-          const sim = window.ArduinoSim;
-          const t = sim && sim.isRunning ? (sim.simTime || 0) / 1000 : performance.now() / 1000;
-
-          const calcWave = (wave, freq, amp, offset, phaseDeg, duty) => {
-            const phaseRad = (phaseDeg || 0) * Math.PI / 180;
-            const tau = ((t * freq + phaseRad / (2 * Math.PI)) % 1 + 1) % 1;
-            const dutyFrac = (duty || 50) / 100;
-            let v = 0;
-            switch (wave) {
-              case 'sine': v = Math.sin(2 * Math.PI * tau); break;
-              case 'square': v = tau < dutyFrac ? 1 : -1; break;
-              case 'triangle': v = tau < dutyFrac ? -1 + 2 * (tau / dutyFrac) : 1 - 2 * ((tau - dutyFrac) / (1 - dutyFrac)); break;
-              case 'sawtooth': v = 2 * tau - 1; break;
-              case 'noise': v = Math.sin(t * freq * 137.5) * 0.7 + Math.sin(t * freq * 239.1) * 0.3; break;
-              default: v = Math.sin(2 * Math.PI * tau); break;
-            }
-            return offset + v * (amp / 2);
-          };
-
-          const ch1V = calcWave(props.ch1_wave || 'sine', props.ch1_freq || 440, props.ch1_amp || 5, props.ch1_offset || 0, props.ch1_phase || 0, props.ch1_duty || 50);
-          const ch2V = calcWave(props.ch2_wave || 'square', props.ch2_freq || 880, props.ch2_amp || 3, props.ch2_offset || 0, props.ch2_phase || 90, props.ch2_duty || 50);
-
-          inst.runtimeState.ch1_voltage = ch1V;
-          inst.runtimeState.ch2_voltage = ch2V;
+          const def = window.ArduinoComponents?.COMPONENT_DEFS?.func_gen;
+          if (def && typeof def.step === 'function') {
+            def.step(inst, window.ArduinoSim);
+          }
           break;
         }
 
@@ -5680,6 +6042,15 @@ class CircuitCanvas {
         ic_74hc164: ['Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6', 'Q7'],
         ic_74hc4017: ['Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6', 'Q7', 'Q8', 'Q9', 'Q59'],
         lm741: ['OUT'],
+        lm358: ['1OUT', '2OUT'],
+        lm393: ['1OUT', '2OUT'],
+        lm324: ['1OUT', '2OUT', '3OUT', '4OUT'],
+        cd4066: ['SIG1B', 'SIG2B', 'SIG3B', 'SIG4B'],
+        ic_74hc14: ['Y1', 'Y2', 'Y3', 'Y4', 'Y5', 'Y6'],
+        ic_74hc283: ['S1', 'S2', 'S3', 'S4', 'C4'],
+        ic_74hc85: ['QA_GT_B', 'QA_EQ_B', 'QA_LT_B'],
+        ic_74hc151: ['Y', 'W'],
+        ic_74hc76: ['1Q', '1Qn', '2Q', '2Qn'],
         ic_8255: ['PA0','PA1','PA2','PA3','PA4','PA5','PA6','PA7',
                   'PB0','PB1','PB2','PB3','PB4','PB5','PB6','PB7',
                   'PC0','PC1','PC2','PC3','PC4','PC5','PC6','PC7'],
@@ -5689,6 +6060,9 @@ class CircuitCanvas {
         if (inst.type === 'lm741') {
           rawVal = inst.runtimeState && inst.runtimeState.vOut != null
             ? Math.round((inst.runtimeState.vOut / 5.0) * 255) : 0;
+        } else if (inst.type === 'lm358' || inst.type === 'lm324') {
+          const v = inst.runtimeState?.[current.pinId] ?? 0;
+          rawVal = Math.max(0, Math.min(255, Math.round((v / 5.0) * 255)));
         } else {
           rawVal = inst.runtimeState && inst.runtimeState[current.pinId] != null
             ? inst.runtimeState[current.pinId] : 0;
@@ -5866,6 +6240,15 @@ class CircuitCanvas {
       ic_74hc164: ['Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6', 'Q7'],
       ic_74hc4017: ['Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6', 'Q7', 'Q8', 'Q9', 'Q59'],
       lm741: ['OUT'],
+      lm358: ['1OUT', '2OUT'],
+      lm393: ['1OUT', '2OUT'],
+      lm324: ['1OUT', '2OUT', '3OUT', '4OUT'],
+      cd4066: ['SIG1B', 'SIG2B', 'SIG3B', 'SIG4B'],
+      ic_74hc14: ['Y1', 'Y2', 'Y3', 'Y4', 'Y5', 'Y6'],
+      ic_74hc283: ['S1', 'S2', 'S3', 'S4', 'C4'],
+      ic_74hc85: ['QA_GT_B', 'QA_EQ_B', 'QA_LT_B'],
+      ic_74hc151: ['Y', 'W'],
+      ic_74hc76: ['1Q', '1Qn', '2Q', '2Qn'],
       ic_8255: ['PA0','PA1','PA2','PA3','PA4','PA5','PA6','PA7',
                 'PB0','PB1','PB2','PB3','PB4','PB5','PB6','PB7',
                 'PC0','PC1','PC2','PC3','PC4','PC5','PC6','PC7'],
@@ -6267,6 +6650,17 @@ class CircuitCanvas {
     const other = wireTarget.inst;
     if (other.type === 'power_5v') return 1023;
     if (other.type === 'power_gnd') return 0;
+    if (other.type === 'func_gen') {
+      const rs = other.runtimeState || {};
+      const tp = wireTarget.pinId;
+      const v = tp === 'ch1_out' ? (rs.ch1_voltage != null ? rs.ch1_voltage : 0)
+        : tp === 'ch2_out' ? (rs.ch2_voltage != null ? rs.ch2_voltage : 0) : 0;
+      const src = this.components.find(c => c.id === fromInstId);
+      const vRef = (src && (src.type === 'esp32_devkit_v1' || src.type === 'stm32f746_disco'
+        || src.type === 'lpc2148' || src.type === 'pico2w')) ? 3.3 : 5.0;
+      const clampedV = Math.max(0, Math.min(vRef, v));
+      return Math.max(0, Math.min(1023, Math.round((clampedV / vRef) * 1023)));
+    }
     if (other.type === 'push_button') {
       const pressed = other.runtimeState && other.runtimeState.pressed;
       const tp = wireTarget.pinId;
@@ -6369,6 +6763,15 @@ class CircuitCanvas {
       ic_74hc164: ['Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6', 'Q7'],
       ic_74hc4017: ['Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6', 'Q7', 'Q8', 'Q9', 'Q59'],
       lm741: ['OUT'],
+      lm358: ['1OUT', '2OUT'],
+      lm393: ['1OUT', '2OUT'],
+      lm324: ['1OUT', '2OUT', '3OUT', '4OUT'],
+      cd4066: ['SIG1B', 'SIG2B', 'SIG3B', 'SIG4B'],
+      ic_74hc14: ['Y1', 'Y2', 'Y3', 'Y4', 'Y5', 'Y6'],
+      ic_74hc283: ['S1', 'S2', 'S3', 'S4', 'C4'],
+      ic_74hc85: ['QA_GT_B', 'QA_EQ_B', 'QA_LT_B'],
+      ic_74hc151: ['Y', 'W'],
+      ic_74hc76: ['1Q', '1Qn', '2Q', '2Qn'],
       ic_8255: ['D0', 'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7',
                 'PA0','PA1','PA2','PA3','PA4','PA5','PA6','PA7',
                 'PB0','PB1','PB2','PB3','PB4','PB5','PB6','PB7',
