@@ -221,9 +221,9 @@ describe('persistence + source wiring', () => {
     expect(out.components[0].props.forcedInputs).toEqual({ A1: 1, B2: 0 });
   });
 
-  it('ics.js: all 18 class _readDigitalInput bodies check the force first', () => {
+  it('ics.js: all 23 class _readDigitalInput bodies check the force first', () => {
     const src = readSrc('js/components/ics.js');
-    expect(src.split('const forced = this.getForcedLevel(pinId);').length - 1).toBe(18);
+    expect(src.split('const forced = this.getForcedLevel(pinId);').length - 1).toBe(23);
   });
 
   it('source hooks: canvas force lookup, base helper, hidden modal prop row', () => {

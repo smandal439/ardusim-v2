@@ -609,6 +609,15 @@ class ElectricalEngine {
       case 'ic_74hc164':
       case 'ic_74hc4017':
       case 'lm741':
+      case 'lm358':
+      case 'lm393':
+      case 'lm324':
+      case 'cd4066':
+      case 'ic_74hc14':
+      case 'ic_74hc283':
+      case 'ic_74hc85':
+      case 'ic_74hc151':
+      case 'ic_74hc76':
       case 'ic_8255':
         this._classifyIC(inst);
         break;
@@ -663,6 +672,15 @@ class ElectricalEngine {
       ic_74hc164: ['Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6', 'Q7'],
       ic_74hc4017: ['Q0', 'Q1', 'Q2', 'Q3', 'Q4', 'Q5', 'Q6', 'Q7', 'Q8', 'Q9', 'Q59'],
       lm741: ['OUT'],
+      lm358: ['1OUT', '2OUT'],
+      lm393: ['1OUT', '2OUT'],
+      lm324: ['1OUT', '2OUT', '3OUT', '4OUT'],
+      cd4066: ['SIG1B', 'SIG2B', 'SIG3B', 'SIG4B'],
+      ic_74hc14: ['Y1', 'Y2', 'Y3', 'Y4', 'Y5', 'Y6'],
+      ic_74hc283: ['S1', 'S2', 'S3', 'S4', 'C4'],
+      ic_74hc85: ['QA_GT_B', 'QA_EQ_B', 'QA_LT_B'],
+      ic_74hc151: ['Y', 'W'],
+      ic_74hc76: ['1Q', '1Qn', '2Q', '2Qn'],
       ic_8255: ['PA0','PA1','PA2','PA3','PA4','PA5','PA6','PA7',
                 'PB0','PB1','PB2','PB3','PB4','PB5','PB6','PB7',
                 'PC0','PC1','PC2','PC3','PC4','PC5','PC6','PC7'],
@@ -675,6 +693,9 @@ class ElectricalEngine {
       if (inst.type === 'lm741') {
         rawVal = inst.runtimeState?.vOut != null
           ? Math.round((inst.runtimeState.vOut / 5.0) * 255) : 0;
+      } else if (inst.type === 'lm358' || inst.type === 'lm324') {
+        const v = inst.runtimeState?.[pinId] ?? 0;
+        rawVal = Math.max(0, Math.min(255, Math.round((v / 5.0) * 255)));
       } else {
         rawVal = inst.runtimeState?.[pinId] ?? 0;
       }

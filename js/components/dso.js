@@ -174,7 +174,9 @@ defComp({
       const cc = window.CircuitCanvas;
       if (cc && typeof cc._getWireTarget === 'function') {
         const target = cc._getWireTarget(dsoInst.id, pinId);
-        if (target && target.inst && target.inst.type === 'func_gen') return target.inst;
+        if (target && target.inst && target.inst.type === 'func_gen') {
+          return { inst: target.inst, pinId: target.pinId };
+        }
       }
       if (cc && Array.isArray(cc.wires) && Array.isArray(cc.components)) {
         for (const wire of cc.wires) {
@@ -182,33 +184,43 @@ defComp({
           const matchesTo = wire.to?.instId === dsoInst.id && wire.to?.pinId === pinId;
           if (!matchesFrom && !matchesTo) continue;
           const otherId = matchesFrom ? wire.to?.instId : wire.from?.instId;
+          const otherPin = matchesFrom ? wire.to?.pinId : wire.from?.pinId;
           const other = cc.components.find(component => component.id === otherId);
-          if (other?.type === 'func_gen') return other;
+          if (other?.type === 'func_gen') return { inst: other, pinId: otherPin };
         }
       }
       return null;
     };
 
-    const _calcWaveAnalytical = (fgInst, chPin, sampleT) => {
-      if (!fgInst) return null;
+    const _calcWaveAnalytical = (fgConn, maybePinOrTime, maybeTime) => {
+      if (!fgConn) return null;
+      const fgInst = fgConn.inst || fgConn;
+      const pinId = typeof maybePinOrTime === 'string' ? maybePinOrTime : (fgConn.pinId || 'ch1_out');
+      const sampleT = typeof maybePinOrTime === 'number' ? maybePinOrTime : maybeTime;
+      const ch = pinId === 'ch2_out' ? 'ch2' : 'ch1';
+      const fgDef = window.ArduinoComponents?.COMPONENT_DEFS?.func_gen;
+      if (fgDef && typeof fgDef.evaluateChannel === 'function') {
+        return fgDef.evaluateChannel(fgInst, ch, sampleT);
+      }
       const fgProps = fgInst.props || {};
-      const isWave = chPin === 'ch1_out';
-      const wave = fgProps[isWave ? 'ch1_wave' : 'ch2_wave'] || 'sine';
-      const freq = fgProps[isWave ? 'ch1_freq' : 'ch2_freq'] || 440;
-      const amp = fgProps[isWave ? 'ch1_amp' : 'ch2_amp'] || 5;
-      const offset = fgProps[isWave ? 'ch1_offset' : 'ch2_offset'] || 0;
-      const phaseDeg = fgProps[isWave ? 'ch1_phase' : 'ch2_phase'] || 0;
-      const duty = fgProps[isWave ? 'ch1_duty' : 'ch2_duty'] || 50;
+      const isCh1 = ch === 'ch1';
+      const wave = fgProps[isCh1 ? 'ch1_wave' : 'ch2_wave'] || 'sine';
+      const freq = fgProps[isCh1 ? 'ch1_freq' : 'ch2_freq'] || 440;
+      const amp = fgProps[isCh1 ? 'ch1_amp' : 'ch2_amp'] || 5;
+      const offset = fgProps[isCh1 ? 'ch1_offset' : 'ch2_offset'] || 0;
+      const phaseDeg = fgProps[isCh1 ? 'ch1_phase' : 'ch2_phase'] || 0;
+      const duty = fgProps[isCh1 ? 'ch1_duty' : 'ch2_duty'] || 50;
       const phaseRad = phaseDeg * Math.PI / 180;
       const tau = ((sampleT * freq + phaseRad / (2 * Math.PI)) % 1 + 1) % 1;
       const dutyFrac = duty / 100;
       let v = 0;
       switch (wave) {
-        case 'sine':     v = Math.sin(2 * Math.PI * tau); break;
         case 'square':   v = tau < dutyFrac ? 1 : -1; break;
         case 'triangle': v = tau < dutyFrac ? -1 + 2 * (tau / dutyFrac) : 1 - 2 * ((tau - dutyFrac) / (1 - dutyFrac)); break;
         case 'sawtooth': v = 2 * tau - 1; break;
+        case 'ramp_down': v = 1 - 2 * tau; break;
         case 'noise':    v = Math.sin(sampleT * freq * 137.5) * 0.7 + Math.sin(sampleT * freq * 239.1) * 0.3; break;
+        case 'dc':       v = 0; break;
         default:         v = Math.sin(2 * Math.PI * tau); break;
       }
       return offset + v * (amp / 2);

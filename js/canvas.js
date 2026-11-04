@@ -1830,6 +1830,23 @@ class CircuitCanvas {
     this.selectedWire = null;
     this.selectedAnnotation = null;
     this._onChanged();
+    this._notifySelectionChange();
+  }
+
+  deselectAll() {
+    this._selectAll(false);
+    this.selected = null;
+    this.selectedWire = null;
+    this.selectedAnnotation = null;
+    this._render();
+    this._notifySelectionChange();
+  }
+
+  _notifySelectionChange() {
+    if (typeof this.onSelectionChange === 'function') {
+      const selected = (this.components || []).filter(c => c && c.selected);
+      this.onSelectionChange(selected);
+    }
   }
 
   rotateSelected() {
@@ -1841,6 +1858,7 @@ class CircuitCanvas {
       c.rotation = ((c.rotation || 0) + 1) % 4;
     }
     this._onChanged();
+    this._notifySelectionChange();
   }
 
   deleteSelected() {
@@ -1850,6 +1868,7 @@ class CircuitCanvas {
       this.selectedAnnotation = null;
       this._pushHistory();
       this._onChanged();
+      this._notifySelectionChange();
       return;
     }
     const selComps = this.components.filter(c => c.selected);
@@ -1862,9 +1881,13 @@ class CircuitCanvas {
       this.selectedWire = null;
       this.selectedAnnotation = null;
       this._onChanged();
+      this._notifySelectionChange();
       return;
     }
-    if (this.selectedWire) { this.removeWire(this.selectedWire.id); }
+    if (this.selectedWire) {
+      this.removeWire(this.selectedWire.id);
+      this._notifySelectionChange();
+    }
   }
 
   selectAll() {
@@ -1872,6 +1895,7 @@ class CircuitCanvas {
     this.selected = this.components[this.components.length - 1] || null;
     (this.annotations || []).forEach(a => a.selected = false);
     this.selectedAnnotation = null;
+    this._notifySelectionChange();
   }
 
   duplicateSelected() {
@@ -1917,6 +1941,7 @@ class CircuitCanvas {
     this.selected = dupes[dupes.length - 1] || null;
     this.selectedWire = null;
     this._onChanged();
+    this._notifySelectionChange();
     return this.selected;
   }
 
@@ -2016,6 +2041,7 @@ class CircuitCanvas {
     }
     // Notify app that placing mode started
     if (this.onPlacingChanged) this.onPlacingChanged(true, type);
+    this._notifySelectionChange();
   }
 
   startTextPlacement() {
@@ -2038,6 +2064,7 @@ class CircuitCanvas {
       hint.classList.remove('hidden');
     }
     if (this.onPlacingChanged) this.onPlacingChanged(true, null);
+    this._notifySelectionChange();
   }
 
   addTextAnnotation(text, worldX, worldY) {
@@ -2081,6 +2108,7 @@ class CircuitCanvas {
     document.querySelectorAll('.comp-item').forEach(el => el.classList.remove('placing'));
     // Notify app that placing mode ended
     if (this.onPlacingChanged) this.onPlacingChanged(false);
+    this._notifySelectionChange();
   }
 
   /* -------------- EVENT HANDLING -------------- */
@@ -2113,6 +2141,7 @@ class CircuitCanvas {
   _onTouchStart(e) {
     if (e.touches.length === 2) {
       e.preventDefault();
+      clearTimeout(this._longPressTimer);
       this._touchActive = false;
       this._pinchStart = this._getTouchDist(e.touches);
       this._pinchCenter = this._getTouchCenter(e.touches);
@@ -2140,20 +2169,29 @@ class CircuitCanvas {
       e.preventDefault();
       const dist = this._getTouchDist(e.touches);
       const center = this._getTouchCenter(e.touches);
-      const factor = dist / this._pinchStart;
+      const factor = dist / (this._pinchStart || dist);
       const rect = this.canvas.getBoundingClientRect();
       const mx = center.x - rect.left;
       const my = center.y - rect.top;
 
-      this.panX -= (mx - this.panX) * (factor - 1);
-      this.panY -= (my - this.panY) * (factor - 1);
-      this.zoom = Math.max(0.1, Math.min(4, this.zoom * factor));
+      // Two-finger pan: move canvas with gesture center
+      if (this._pinchCenter) {
+        this.panX += (center.x - this._pinchCenter.x);
+        this.panY += (center.y - this._pinchCenter.y);
+      }
+
+      if (Math.abs(factor - 1) > 0.005) {
+        this.panX -= (mx - this.panX) * (factor - 1);
+        this.panY -= (my - this.panY) * (factor - 1);
+        this.zoom = Math.max(0.1, Math.min(4, this.zoom * factor));
+      }
       this._pinchStart = dist;
       this._pinchCenter = center;
       this._updateZoomDisplay();
+      this._render();
       return;
     }
-    if (e.touches.length === 1) {
+    if (e.touches.length === 1 && !this._isPinching) {
       const touch = e.touches[0];
       const rect = this.canvas.getBoundingClientRect();
       const offsetX = touch.clientX - rect.left;
@@ -2178,7 +2216,14 @@ class CircuitCanvas {
 
   _onTouchEnd(e) {
     clearTimeout(this._longPressTimer);
-    this._isPinching = false;
+    if (this._isPinching) {
+      if (e.touches.length === 0) {
+        this._isPinching = false;
+        this._touchActive = false;
+      }
+      this._render();
+      return;
+    }
     if (e.changedTouches.length === 1) {
       const touch = e.changedTouches[0];
       const rect = this.canvas.getBoundingClientRect();
@@ -2209,6 +2254,7 @@ class CircuitCanvas {
       this._selectAll(false);
       comp.selected = true;
       this.selected = comp;
+      this._notifySelectionChange();
       if (window.App) window.App._showContextMenu(comp, offsetX + this.canvas.getBoundingClientRect().left, offsetY + this.canvas.getBoundingClientRect().top);
     }
   }
@@ -2817,6 +2863,7 @@ class CircuitCanvas {
       this.draggingWire = null;
       this.canvas.style.cursor = '';
     }
+    this._notifySelectionChange();
   }
 
   _onWheel(e) {
@@ -2974,6 +3021,7 @@ class CircuitCanvas {
     const hint = document.getElementById('wiring-hint');
     if (hint) hint.classList.remove('hidden');
     this.canvas.style.cursor = 'crosshair';
+    this._notifySelectionChange();
   }
 
   _endWiring() {
@@ -2983,12 +3031,29 @@ class CircuitCanvas {
     this.canvas.style.cursor = '';
     const hint = document.getElementById('wiring-hint');
     if (hint) hint.classList.add('hidden');
+    this._notifySelectionChange();
+  }
+
+  _notifySelectionChange() {
+    if (typeof this.onSelectionChange === 'function') {
+      try {
+        this.onSelectionChange({
+          selected: this.selected,
+          selectedWire: this.selectedWire,
+          selectedAnnotation: this.selectedAnnotation,
+          mode: this.mode,
+          placingType: this.placingType,
+          wiringFrom: this.wiringFrom
+        });
+      } catch (_) {}
+    }
   }
 
   /* -------------- HIT TESTING -------------- */
   _hitTestPin(wx, wy) {
     const { COMPONENT_DEFS } = window.ArduinoComponents;
-    const radius = Math.max(8, 10 / this.zoom);
+    const isTouch = this._touchActive || (typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches);
+    const radius = isTouch ? Math.max(16, 22 / this.zoom) : Math.max(8, 10 / this.zoom);
 
     for (const inst of [...this.components].reverse()) {
       const def = COMPONENT_DEFS[inst.type];
@@ -3131,7 +3196,8 @@ class CircuitCanvas {
   }
 
   _hitTestWireDetails(wx, wy) {
-    const threshold = Math.max(6, 8 / this.zoom);
+    const isTouch = this._touchActive || (typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches);
+    const threshold = isTouch ? Math.max(12, 16 / this.zoom) : Math.max(6, 8 / this.zoom);
     let best = null;
 
     for (const wire of [...this.wires].reverse()) {

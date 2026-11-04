@@ -402,9 +402,14 @@ const COMPONENT_CATALOG = [
   { category: 'Power', ids: ['power_5v', 'power_gnd', 'battery', 'mb102_power', 'bench_power_supply'] },
   {
     category: 'Digital ICs',
-    ids: ['ic_555', 'ic_74hc00', 'ic_74hc02', 'ic_74hc04', 'ic_74hc08', 'ic_74hc32', 'ic_74hc86',
-      'ic_74hc74', 'ic_74hc47', 'ic_74hc138', 'ic_74hc139', 'ic_74hc148', 'ic_74hc153', 'ic_74hc164',
-      'ic_74hc165', 'ic_74hc193', 'ic_74hc245', 'ic_74hc595', 'ic_74hc4017', 'ic_8255', 'lm741']
+    ids: ['ic_555', 'ic_74hc00', 'ic_74hc02', 'ic_74hc04', 'ic_74hc08', 'ic_74hc14', 'ic_74hc32', 'ic_74hc86',
+      'ic_74hc74', 'ic_74hc76', 'ic_74hc47', 'ic_74hc85', 'ic_74hc138', 'ic_74hc139', 'ic_74hc148',
+      'ic_74hc151', 'ic_74hc153', 'ic_74hc164', 'ic_74hc165', 'ic_74hc193', 'ic_74hc245', 'ic_74hc283',
+      'ic_74hc595', 'ic_74hc4017', 'ic_8255', 'lm741']
+  },
+  {
+    category: 'Analog ICs',
+    ids: ['lm358', 'lm324', 'lm393', 'cd4066', 'lm741']
   },
   { category: 'Communication', ids: ['wifi_module', 'lora_module', 'sd_card', 'hc05', 'gps_neo6m', 'rc522', 'rfid_card', 'gsm_module_2g', 'gsm_module_4g', 'gsm_module_5g'] },
   {

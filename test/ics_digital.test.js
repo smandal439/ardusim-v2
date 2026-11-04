@@ -59,9 +59,10 @@ const { COMPONENT_CATALOG, COMPONENT_DEFS, getComponentClass, createComponent, P
 const { ArduinoSimulator } = loadScripts(['js/simulator.js'], ['ArduinoSimulator']);
 
 const NEW_IDS = ['ic_74hc02', 'ic_74hc86', 'ic_74hc139', 'ic_74hc153', 'ic_74hc164', 'ic_74hc4017'];
-const ALL_IDS = ['ic_555', 'ic_74hc00', 'ic_74hc02', 'ic_74hc04', 'ic_74hc08', 'ic_74hc32', 'ic_74hc86',
-  'ic_74hc74', 'ic_74hc47', 'ic_74hc138', 'ic_74hc139', 'ic_74hc148', 'ic_74hc153', 'ic_74hc164',
-  'ic_74hc165', 'ic_74hc193', 'ic_74hc245', 'ic_74hc595', 'ic_74hc4017', 'ic_8255', 'lm741'];
+const ALL_IDS = ['ic_555', 'ic_74hc00', 'ic_74hc02', 'ic_74hc04', 'ic_74hc08', 'ic_74hc14', 'ic_74hc32', 'ic_74hc86',
+  'ic_74hc74', 'ic_74hc76', 'ic_74hc47', 'ic_74hc85', 'ic_74hc138', 'ic_74hc139', 'ic_74hc148',
+  'ic_74hc151', 'ic_74hc153', 'ic_74hc164', 'ic_74hc165', 'ic_74hc193', 'ic_74hc245', 'ic_74hc283',
+  'ic_74hc595', 'ic_74hc4017', 'ic_8255', 'lm741'];
 const EXPECT_PINS = { ic_74hc02: 14, ic_74hc86: 14, ic_74hc139: 16, ic_74hc153: 16, ic_74hc164: 14, ic_74hc4017: 16 };
 
 const EXAMPLE_FILES = [
@@ -111,7 +112,7 @@ describe('Digital ICs component panel', () => {
     expect(group.dropdown).toBeUndefined();
   });
 
-  it('lists all 21 ICs as flat items', () => {
+  it('lists all 26 ICs as flat items', () => {
     expect(group.ids).toEqual(ALL_IDS);
     for (const id of ALL_IDS) {
       expect(COMPONENT_DEFS[id], `def ${id}`).toBeTruthy();
