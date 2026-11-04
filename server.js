@@ -137,10 +137,26 @@ function ensureTLSCert() {
   const name = _derSeq(_derSeq(_derOid('2.5.4.3'), _derUtf8('ArduSim')));
   const validity = _derSeq(_derUTCTime(now), _derUTCTime(expiry));
 
-  // Subject Alternative Name: DNS:localhost + IP:127.0.0.1
-  const sanDns = Buffer.concat([Buffer.from([0x82]), _derLen(9), Buffer.from('localhost')]);
-  const sanIp  = Buffer.concat([Buffer.from([0x87]), _derLen(4), Buffer.from([127, 0, 0, 1])]);
-  const generalNames = Buffer.concat([Buffer.from([0x30]), _derLen(sanDns.length + sanIp.length), sanDns, sanIp]);
+  // Subject Alternative Name: DNS:localhost + IP:127.0.0.1 + LAN IPv4 addresses
+  const sanList = [
+    Buffer.concat([Buffer.from([0x82]), _derLen(9), Buffer.from('localhost')]),
+    Buffer.concat([Buffer.from([0x87]), _derLen(4), Buffer.from([127, 0, 0, 1])]),
+  ];
+  try {
+    const nets = os.networkInterfaces();
+    for (const name of Object.keys(nets)) {
+      for (const net of nets[name]) {
+        if (net.family === 'IPv4' && !net.internal) {
+          const octets = net.address.split('.').map(Number);
+          if (octets.length === 4) {
+            sanList.push(Buffer.concat([Buffer.from([0x87]), _derLen(4), Buffer.from(octets)]));
+          }
+        }
+      }
+    }
+  } catch (e) { /* ignore */ }
+  const totalSanLen = sanList.reduce((sum, b) => sum + b.length, 0);
+  const generalNames = Buffer.concat([Buffer.from([0x30]), _derLen(totalSanLen), ...sanList]);
   const sanExtValue = Buffer.concat([Buffer.from([0x04]), _derLen(generalNames.length), generalNames]);
   const sanExt = _derSeq(_derOid('2.5.29.17'), sanExtValue);
 

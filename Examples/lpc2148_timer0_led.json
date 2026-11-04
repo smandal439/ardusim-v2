@@ -3,5 +3,25 @@
   "category": "LPC2148",
   "description": "Toggle LED on P0.0 using Timer0 match interrupt every 500ms",
   "image": "lpc2148",
-  "code": "async function setup() {\n  _regW(0xE0028008, 0x01);  // P0.0 = OUTPUT\n  _regW(0xE0004004, 0x02);  // Timer0 reset\n  _regW(0xE0004004, 0x01);  // Timer0 enable\n  _regW(0xE0004014, 0x01);  // MCR: reset on MR0 match\n  _regW(0xE0004018, 7500000); // MR0 = 7500000 (500ms at 15MHz)\n}\n\nasync function loop() {\n  var ir = _regR(0xE0004000);\n  if (ir & 1) {\n    _regW(0xE0004000, 1);\n    _regW(0xE0028004, 0x01); // Toggle P0.0\n  }\n  await delay_ms(1);\n}"
+  "code": "async function setup() {\n  _regW(0xE0028008, 0x01);  // P0.0 = OUTPUT\n  _regW(0xE0004004, 0x02);  // Timer0 reset\n  _regW(0xE0004004, 0x01);  // Timer0 enable\n  _regW(0xE0004014, 0x01);  // MCR: reset on MR0 match\n  _regW(0xE0004018, 7500000); // MR0 = 7500000 (500ms at 15MHz)\n}\n\nasync function loop() {\n  var ir = _regR(0xE0004000);\n  if (ir & 1) {\n    _regW(0xE0004000, 1);\n    _regW(0xE0028004, 0x01); // Toggle P0.0\n  }\n  await delay_ms(1);\n}",
+  "id": "lpc2148_timer0_led",
+  "desc": "Toggle LED on P0.0 using Timer0 match interrupt every 500ms",
+  "icon": "🔌",
+  "tags": [
+    "arm",
+    "lpc2148",
+    "timer",
+    "led"
+  ],
+  "circuit": {
+    "components": [
+      {
+        "id": "b1",
+        "type": "lpc2148",
+        "x": 200,
+        "y": 100
+      }
+    ],
+    "wires": []
+  }
 }

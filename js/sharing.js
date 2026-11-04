@@ -4,7 +4,7 @@
  */
 
 // Uses native base64 + URI encoding (or integrate lz-string for smaller URLs)
-export const ProjectSharer = {
+const ProjectSharer = {
   /**
    * Encodes current project state into a URL string
    * @param {Object} circuitData - Component positions, wiring array, etc.
@@ -64,3 +64,5 @@ export const ProjectSharer = {
     return url;
   }
 };
+
+if (typeof window !== 'undefined') window.ProjectSharer = ProjectSharer;

@@ -190,5 +190,15 @@
         "waypoints": []
       }
     ]
-  }
+  },
+  "id": "not_gate_test",
+  "desc": "74HC04 Hex Inverter / NOT gate test circuit.",
+  "icon": "🔌",
+  "tags": [
+    "logic",
+    "gate",
+    "not",
+    "74hc04",
+    "breadboard"
+  ]
 }

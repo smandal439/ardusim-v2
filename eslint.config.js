@@ -46,6 +46,8 @@ const projectGlobals = {
   getNetResistance: 'readonly',
 
   // Monaco editor
+  SafetyChecker: 'readonly',
+  ProjectSharer: 'readonly',
   monaco: 'readonly',
   require: 'readonly',
 };
@@ -73,26 +75,6 @@ module.exports = [
       'no-empty': ['warn', { allowEmptyCatch: true }],
       'no-extra-semi': 'error',
       'no-unreachable': 'error',
-    },
-  },
-
-  /* ── ES module files ── */
-  {
-    files: ['js/safetyChecker.js', 'js/sharing.js'],
-    languageOptions: {
-      ecmaVersion: 2022,
-      sourceType: 'module',
-      globals: {
-        ...globals.browser,
-        ...projectGlobals,
-      },
-    },
-    rules: {
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-      'no-undef': 'error',
-      'no-redeclare': 'off',
-      'eqeqeq': ['warn', 'smart'],
-      'no-empty': ['warn', { allowEmptyCatch: true }],
     },
   },
 

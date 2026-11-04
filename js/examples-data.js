@@ -5045,7 +5045,17 @@ window.EXAMPLE_SKETCHES = [
           }
         }
       ]
-    }
+    },
+    "id": "and_gate",
+    "desc": "74HC08 Quad AND Gate Test with buttons and LED on breadboard.",
+    "icon": "🔌",
+    "tags": [
+      "logic",
+      "gate",
+      "and",
+      "74hc08",
+      "breadboard"
+    ]
   },
   {
     "id": "battery_in_series",
@@ -13496,7 +13506,15 @@ window.EXAMPLE_SKETCHES = [
           "waypoints": []
         }
       ]
-    }
+    },
+    "id": "func_gen_dual",
+    "desc": "Dual Function Generator test with Oscilloscope.",
+    "icon": "📈",
+    "tags": [
+      "generator",
+      "oscilloscope",
+      "instrument"
+    ]
   },
   {
     "version": "1.1",
@@ -13626,7 +13644,15 @@ window.EXAMPLE_SKETCHES = [
           "waypoints": []
         }
       ]
-    }
+    },
+    "id": "func_gen_led",
+    "desc": "Function Generator driving an LED circuit.",
+    "icon": "📈",
+    "tags": [
+      "generator",
+      "led",
+      "instrument"
+    ]
   },
   {
     "id": "gps_neo_6m_8m_tracker",
@@ -20944,7 +20970,9 @@ window.EXAMPLE_SKETCHES = [
       ],
       "wires": []
     },
-    "sketch.c": "/*\n * LPC2148 SmartX Board - 4-LED Binary Counter\n * Counts from 0 to 15 on onboard LEDs (P0.12-P0.15)\n * No external wiring required!\n */\n\n#include <LPC214x.h>\n\nint main() {\n    // Set P0.12-P0.15 as outputs (LED1-LED4)\n    IO0DIR |= (1 << 12) | (1 << 13) | (1 << 14) | (1 << 15);\n    int count = 0;\n    while (1) {\n        IO0CLR = 0xF << 12;              // Clear all 4 LEDs\n        IO0SET = (count & 0xF) << 12;    // Set current count pattern\n        delay_ms(500);\n        count = (count + 1) & 0xF;       // Increment, wrap at 16\n    }\n}"
+    "files": {
+      "sketch.c": "/*\n * LPC2148 SmartX Board - 4-LED Binary Counter\n * Counts from 0 to 15 on onboard LEDs (P0.12-P0.15)\n * No external wiring required!\n */\n\n#include <LPC214x.h>\n\nint main() {\n    // Set P0.12-P0.15 as outputs (LED1-LED4)\n    IO0DIR |= (1 << 12) | (1 << 13) | (1 << 14) | (1 << 15);\n    int count = 0;\n    while (1) {\n        IO0CLR = 0xF << 12;              // Clear all 4 LEDs\n        IO0SET = (count & 0xF) << 12;    // Set current count pattern\n        delay_ms(500);\n        count = (count + 1) & 0xF;       // Increment, wrap at 16\n    }\n}"
+    }
   },
   {
     "id": "lpc2148_binary_counter",
@@ -21218,6 +21246,26 @@ window.EXAMPLE_SKETCHES = [
     "image": "lpc2148",
     "files": {
       "sketch.c": "var phase = 0;\n\nasync function setup() {\n  _regW(0xE0028008, 0); // P0.25 = INPUT (DAC default)\n}\n\nasync function loop() {\n  var val = Math.round(512 + 511 * Math.sin(phase));\n  _regW(0xE000C500, (val & 0x3FF) << 6);\n  phase += 0.15;\n  if (phase > 6.28) phase -= 6.28;\n  await delay_ms(1);\n}"
+    },
+    "id": "lpc2148_dac_sine",
+    "desc": "Generate a sine wave on the DAC output pin (P0.25)",
+    "icon": "🔌",
+    "tags": [
+      "arm",
+      "lpc2148",
+      "dac",
+      "analog"
+    ],
+    "circuit": {
+      "components": [
+        {
+          "id": "b1",
+          "type": "lpc2148",
+          "x": 200,
+          "y": 100
+        }
+      ],
+      "wires": []
     }
   },
   {
@@ -21339,7 +21387,7 @@ window.EXAMPLE_SKETCHES = [
   {
     "id": "lpc2148_serial_print",
     "name": "LPC2148 Serial Print",
-    "icon": "ðŸ”§",
+    "icon": "🔧",
     "desc": "A custom LPC2148 Serial Print circuit example.",
     "tags": [
       "custom",
@@ -21369,14 +21417,54 @@ window.EXAMPLE_SKETCHES = [
     "category": "LPC2148",
     "description": "Toggle LED on P0.0 using Timer0 match interrupt every 500ms",
     "image": "lpc2148",
-    "code": "async function setup() {\n  _regW(0xE0028008, 0x01);  // P0.0 = OUTPUT\n  _regW(0xE0004004, 0x02);  // Timer0 reset\n  _regW(0xE0004004, 0x01);  // Timer0 enable\n  _regW(0xE0004014, 0x01);  // MCR: reset on MR0 match\n  _regW(0xE0004018, 7500000); // MR0 = 7500000 (500ms at 15MHz)\n}\n\nasync function loop() {\n  var ir = _regR(0xE0004000);\n  if (ir & 1) {\n    _regW(0xE0004000, 1);\n    _regW(0xE0028004, 0x01); // Toggle P0.0\n  }\n  await delay_ms(1);\n}"
+    "code": "async function setup() {\n  _regW(0xE0028008, 0x01);  // P0.0 = OUTPUT\n  _regW(0xE0004004, 0x02);  // Timer0 reset\n  _regW(0xE0004004, 0x01);  // Timer0 enable\n  _regW(0xE0004014, 0x01);  // MCR: reset on MR0 match\n  _regW(0xE0004018, 7500000); // MR0 = 7500000 (500ms at 15MHz)\n}\n\nasync function loop() {\n  var ir = _regR(0xE0004000);\n  if (ir & 1) {\n    _regW(0xE0004000, 1);\n    _regW(0xE0028004, 0x01); // Toggle P0.0\n  }\n  await delay_ms(1);\n}",
+    "id": "lpc2148_timer0_led",
+    "desc": "Toggle LED on P0.0 using Timer0 match interrupt every 500ms",
+    "icon": "🔌",
+    "tags": [
+      "arm",
+      "lpc2148",
+      "timer",
+      "led"
+    ],
+    "circuit": {
+      "components": [
+        {
+          "id": "b1",
+          "type": "lpc2148",
+          "x": 200,
+          "y": 100
+        }
+      ],
+      "wires": []
+    }
   },
   {
     "name": "UART1 Echo",
     "category": "LPC2148",
     "description": "Echo received characters on UART1 back to Serial Monitor",
     "image": "lpc2148",
-    "code": "async function setup() {\n  // PINSEL0: P0.4=TXD1, P0.5=RXD1 (func=01)\n  _regW(0xE002C000, _regR(0xE002C000) | (0x01 << 8) | (0x01 << 10));\n  // UART1: 9600 baud (PCLK=15MHz, divider=975)\n  _regW(0xE0010008, 0x83); // Enable DLAB\n  _regW(0xE0010000, 0x87); // DLL = 0x87\n  _regW(0xE0010004, 0x03); // DLM = 0x03\n  _regW(0xE0010008, 0x03); // 8N1, disable DLAB\n}\n\nasync function loop() {\n  var lsr = _regR(0xE0010014);\n  if (lsr & 1) {\n    var ch = _regR(0xE0010000);\n    _regW(0xE0010000, ch);\n  }\n  await delay_ms(10);\n}"
+    "code": "async function setup() {\n  // PINSEL0: P0.4=TXD1, P0.5=RXD1 (func=01)\n  _regW(0xE002C000, _regR(0xE002C000) | (0x01 << 8) | (0x01 << 10));\n  // UART1: 9600 baud (PCLK=15MHz, divider=975)\n  _regW(0xE0010008, 0x83); // Enable DLAB\n  _regW(0xE0010000, 0x87); // DLL = 0x87\n  _regW(0xE0010004, 0x03); // DLM = 0x03\n  _regW(0xE0010008, 0x03); // 8N1, disable DLAB\n}\n\nasync function loop() {\n  var lsr = _regR(0xE0010014);\n  if (lsr & 1) {\n    var ch = _regR(0xE0010000);\n    _regW(0xE0010000, ch);\n  }\n  await delay_ms(10);\n}",
+    "id": "lpc2148_uart1_echo",
+    "desc": "Echo received characters on UART1 back to Serial Monitor",
+    "icon": "🔌",
+    "tags": [
+      "arm",
+      "lpc2148",
+      "uart",
+      "serial"
+    ],
+    "circuit": {
+      "components": [
+        {
+          "id": "b1",
+          "type": "lpc2148",
+          "x": 200,
+          "y": 100
+        }
+      ],
+      "wires": []
+    }
   },
   {
     "id": "math_operations",
@@ -23961,7 +24049,17 @@ window.EXAMPLE_SKETCHES = [
           "waypoints": []
         }
       ]
-    }
+    },
+    "id": "not_gate_test",
+    "desc": "74HC04 Hex Inverter / NOT gate test circuit.",
+    "icon": "🔌",
+    "tags": [
+      "logic",
+      "gate",
+      "not",
+      "74hc04",
+      "breadboard"
+    ]
   },
   {
     "id": "ntc_thermistor_dc_motor",
@@ -24674,7 +24772,17 @@ window.EXAMPLE_SKETCHES = [
           }
         }
       ]
-    }
+    },
+    "id": "or_gate",
+    "desc": "74HC32 Quad OR Gate test circuit on breadboard.",
+    "icon": "🔌",
+    "tags": [
+      "logic",
+      "gate",
+      "or",
+      "74hc32",
+      "breadboard"
+    ]
   },
   {
     "id": "pico2w_blink",

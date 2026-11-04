@@ -2,7 +2,7 @@
    sw.js — Service Worker for ArduSim PWA
    ═══════════════════════════════════════════════════════ */
 
-const CACHE_NAME = 'ardusim-v45';
+const CACHE_NAME = 'ardusim-v46';
 
 // Compute base path dynamically so the SW works on both root domains
 // (ardusim.app) and GitHub Pages subpaths (/Online-Circuit-Simulator/).
@@ -47,7 +47,9 @@ const STATIC_ASSETS = [
   'js/components/passive.js',
   'js/components/power.js',
   'js/components/ics.js',
+  'js/components/ic_8255.js',
   'js/components/logic_tag.js',
+  'js/components/dso.js',
   'js/components/multimeter.js',
   'js/components/probe.js',
   'js/components/function_generator.js',
@@ -67,7 +69,7 @@ const STATIC_ASSETS = [
   'js/libraries/adafruit_ili9341.js',
   'js/libraries/adafruit_gfx.js',
   'js/libraries/adafruit_mpu6050.js',
-  'js/libraries/adafruit_vl53l0x.js',
+  'js/libraries/vl53l0x.js',
   'js/libraries/neopixel.js',
   'js/libraries/fastled.js',
   'js/libraries/stepper.js',
@@ -82,15 +84,42 @@ const STATIC_ASSETS = [
   'js/libraries/i2s.js',
   'js/libraries/espnow.js',
   'js/libraries/coap.js',
-  'js/libraries/sevensegment.js',
-  'js/libraries/cpp_types.js',
+  'js/libraries/coap_simple.js',
+  'js/libraries/bluetoothserial.js',
+  'js/libraries/zigbee.js',
+  'js/libraries/gsm.js',
+  'js/libraries/lora.js',
+  'js/libraries/freertos.js',
+  'js/libraries/serial.js',
   'js/libraries/ds3231.js',
   'js/libraries/hx711.js',
-  'js/libraries/freertos.js',
-  'js/libraries/lora.js',
+  'js/libraries/adafruitsensor.js',
+  'js/libraries/bh1750.js',
+  'js/libraries/ina219.js',
+  'js/libraries/max6675.js',
+  'js/libraries/sd.js',
+  'js/libraries/tft_espi.js',
+  'js/libraries/esp32servo.js',
+  'js/libraries/u8g2.js',
+  'js/libraries/dfplayer.js',
+  'js/libraries/lpc2148.js',
+  'js/libraries/stm32f746_hal.js',
+  'js/libraries/intel8085_assembler.js',
+  'js/libraries/intel8085_emulator.js',
+  'js/libraries/intel8085.js',
+  'js/libraries/intel8051_assembler.js',
+  'js/libraries/intel8051_emulator.js',
+  'js/libraries/intel8051_c.js',
+  'js/libraries/intel8051.js',
   'js/libraries/tm1637.js',
   'js/libraries/hub75.js',
-  'favicon.ico',
+  'js/libraries/preferences.js',
+  'js/libraries/onewire.js',
+  'js/libraries/dallastemperature.js',
+  'js/libraries/adafruit_bmp280.js',
+  'js/libraries/sevensegment.js',
+  'js/libraries/cpp_types.js',
+  'js/web-browser.js',
 ].map(p => BASE + p);
 
 const OFFLINE_PAGE = `<!DOCTYPE html>

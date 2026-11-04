@@ -1,8 +1,19 @@
 # Dependencies
 node_modules/
 
-# Local server database
+# Local server database & TLS keys
 data/
+*.pem
 
-# Logs
+# Logs & test outputs
 *.log
+test-output.txt
+
+# Upgrader & temporary tooling artifacts
+.tsupgrader/
+
+# Editor and OS metadata
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

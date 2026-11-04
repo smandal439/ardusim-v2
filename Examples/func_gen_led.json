@@ -37,7 +37,9 @@
         "y": 120,
         "width": 20,
         "height": 60,
-        "props": { "value": 220 },
+        "props": {
+          "value": 220
+        },
         "runtimeState": {},
         "selected": false,
         "rotation": 0
@@ -49,7 +51,10 @@
         "y": 100,
         "width": 30,
         "height": 60,
-        "props": { "color": "#ff3333", "colorName": "Red" },
+        "props": {
+          "color": "#ff3333",
+          "colorName": "Red"
+        },
         "runtimeState": {},
         "selected": false,
         "rotation": 0
@@ -68,10 +73,66 @@
       }
     ],
     "wires": [
-      { "id": "w1", "from": { "instId": "fg1", "pinId": "ch1_out" }, "to": { "instId": "r1", "pinId": "p1" }, "color": "#2196F3", "waypoints": [] },
-      { "id": "w2", "from": { "instId": "r1", "pinId": "p2" }, "to": { "instId": "led1", "pinId": "anode" }, "color": null, "waypoints": [] },
-      { "id": "w3", "from": { "instId": "led1", "pinId": "cathode" }, "to": { "instId": "gnd1", "pinId": "gnd" }, "color": null, "waypoints": [] },
-      { "id": "w4", "from": { "instId": "fg1", "pinId": "ch1_gnd" }, "to": { "instId": "gnd1", "pinId": "gnd" }, "color": "#333333", "waypoints": [] }
+      {
+        "id": "w1",
+        "from": {
+          "instId": "fg1",
+          "pinId": "ch1_out"
+        },
+        "to": {
+          "instId": "r1",
+          "pinId": "p1"
+        },
+        "color": "#2196F3",
+        "waypoints": []
+      },
+      {
+        "id": "w2",
+        "from": {
+          "instId": "r1",
+          "pinId": "p2"
+        },
+        "to": {
+          "instId": "led1",
+          "pinId": "anode"
+        },
+        "color": null,
+        "waypoints": []
+      },
+      {
+        "id": "w3",
+        "from": {
+          "instId": "led1",
+          "pinId": "cathode"
+        },
+        "to": {
+          "instId": "gnd1",
+          "pinId": "gnd"
+        },
+        "color": null,
+        "waypoints": []
+      },
+      {
+        "id": "w4",
+        "from": {
+          "instId": "fg1",
+          "pinId": "ch1_gnd"
+        },
+        "to": {
+          "instId": "gnd1",
+          "pinId": "gnd"
+        },
+        "color": "#333333",
+        "waypoints": []
+      }
     ]
-  }
+  },
+  "id": "func_gen_led",
+  "desc": "Function Generator driving an LED circuit.",
+  "icon": "📈",
+  "tags": [
+    "generator",
+    "led",
+    "instrument"
+  ]
 }

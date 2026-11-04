@@ -3628,7 +3628,7 @@ _newProject() {
       item.type = 'button';
       const thumb = window.CircuitThumbnail?.render(example.circuit, 260, 150);
       item.innerHTML = `
-        <div class="example-thumb">${thumb ? `<img src="${thumb}" alt="" loading="lazy">` : `<span class="example-thumb-icon">${example.icon || 'ðŸ“„'}</span>`}</div>
+        <div class="example-thumb">${thumb ? `<img src="${thumb}" alt="" loading="lazy">` : `<span class="example-thumb-icon">${example.icon || '📄'}</span>`}</div>
         <div class="example-info">
           <strong>${this._escHtml(example.name)}</strong>
           <span class="example-desc">${this._escHtml(example.desc)}</span>

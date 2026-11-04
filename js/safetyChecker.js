@@ -3,7 +3,7 @@
  * Runs validation during circuit simulation.
  */
 
-export class SafetyChecker {
+class SafetyChecker {
   /**
    * Checks LED status against voltage and limiting resistance
    * @param {number} supplyVoltage - Input voltage across branch (e.g. 5V)
@@ -34,3 +34,5 @@ export class SafetyChecker {
     };
   }
 }
+
+if (typeof window !== 'undefined') window.SafetyChecker = SafetyChecker;
