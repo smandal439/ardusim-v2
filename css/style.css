@@ -1335,6 +1335,25 @@ body.file-explorer-collapsed .file-explorer-expand {
   backdrop-filter: blur(8px);
   pointer-events: none;
 }
+.hint-cancel-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 85, 85, 0.2);
+  border: 1px solid rgba(255, 85, 85, 0.4);
+  color: #ff6e6e;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 10px;
+  padding: 2px 8px;
+  margin-left: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.hint-cancel-btn:hover {
+  background: rgba(255, 85, 85, 0.35);
+}
 
 /* ═══════════════ COMPONENT LIBRARY ═══════════════ */
 .component-search-box {
@@ -3709,6 +3728,11 @@ body.file-explorer-collapsed .file-explorer-expand {
   .project-name-wrapper { max-width: 140px; }
 }
 
+/* Mobile canvas quick-action toolbar base */
+.mobile-canvas-actions {
+  display: none;
+}
+
 /* ══════════════════════════════════════════════════════════════════
    MOBILE BREAKPOINT (< 768px)
    ══════════════════════════════════════════════════════════════════ */
@@ -3830,7 +3854,8 @@ body.file-explorer-collapsed .file-explorer-expand {
     gap: 4px;
   }
   .panel-canvas .panel-title { font-size: 11px; }
-  .canvas-zoom-ctrl { gap: 2px; }
+  .canvas-zoom-ctrl { gap: 4px; }
+  .canvas-zoom-ctrl .panel-icon-btn { min-width: 28px; min-height: 28px; }
   .panel-toggle-btn { display: none; }
   .canvas-footer { display: none; }
 
@@ -3903,14 +3928,16 @@ body.file-explorer-collapsed .file-explorer-expand {
 
   /* --- Context menu: bottom sheet style --- */
   .canvas-context-menu {
-    position: fixed;
-    bottom: 52px;
-    left: 8px;
-    right: 8px;
-    top: auto;
+    position: fixed !important;
+    bottom: 56px !important;
+    left: 8px !important;
+    right: 8px !important;
+    top: auto !important;
     border-radius: var(--radius-md);
-    z-index: 170;
-    min-width: auto;
+    z-index: 170 !important;
+    min-width: auto !important;
+    width: auto !important;
+    max-width: calc(100vw - 16px) !important;
   }
 
   /* --- Toast: full width --- */
@@ -3951,10 +3978,128 @@ body.file-explorer-collapsed .file-explorer-expand {
     right: 8px;
     top: auto;
     z-index: 75;
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-size: 12px;
     padding: 8px 12px;
     border-radius: var(--radius-md);
+  }
+  .hint-cancel-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 85, 85, 0.2);
+    border: 1px solid rgba(255, 85, 85, 0.5);
+    color: #ff6e6e;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 12px;
+    padding: 4px 10px;
+    margin-left: 8px;
+    cursor: pointer;
+    min-height: 28px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .hint-cancel-btn:active {
+    background: rgba(255, 85, 85, 0.4);
+  }
+
+  /* --- Mobile Canvas Quick Actions --- */
+  .mobile-canvas-actions {
+    display: flex;
+    position: fixed;
+    bottom: 58px;
+    left: 8px;
+    right: 8px;
+    z-index: 85;
+    justify-content: center;
+    pointer-events: none;
+  }
+  .mobile-canvas-actions.hidden {
+    display: none !important;
+  }
+  .mob-actions-wrap {
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg-panel, #1e1e2e);
+    border: 1px solid var(--border, #313244);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    border-radius: 24px;
+    padding: 4px 8px;
+    max-width: calc(100vw - 20px);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .mob-action-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary, #a6adc8);
+    padding: 0 6px;
+    white-space: nowrap;
+    border-right: 1px solid var(--border, #313244);
+    max-width: 90px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mob-action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .mob-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 10px;
+    min-height: 36px;
+    border: 1px solid var(--border, #313244);
+    border-radius: 18px;
+    background: var(--bg-card, #252538);
+    color: var(--text-primary, #cdd6f4);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mob-action-btn:active {
+    background: var(--bg-hover, #313244);
+    transform: scale(0.96);
+  }
+  .mob-action-btn.mob-btn-danger {
+    color: #ff5555;
+    border-color: rgba(255, 85, 85, 0.3);
+  }
+  .mob-action-btn.mob-btn-danger:active {
+    background: rgba(255, 85, 85, 0.15);
+  }
+  .mob-wire-colors {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 4px;
+  }
+  .mob-color-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    outline: none;
+    padding: 0;
+    transition: transform 0.15s ease;
+  }
+  .mob-color-btn.active {
+    border-color: #ffffff;
+    transform: scale(1.15);
+    box-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
+  }
+  .mob-color-btn:active {
+    transform: scale(0.9);
   }
 
   /* --- Scrollbar thin on mobile --- */

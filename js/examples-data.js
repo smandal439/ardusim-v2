@@ -18096,6 +18096,305 @@ window.EXAMPLE_SKETCHES = [
     "code": "/*\n * IR Remote Decoder with LCD Display\n * Receives NEC IR codes from a remote control and displays\n * the hex values on a 16x2 I2C LCD.\n *\n * Wiring:\n *   TSOP4838 OUT -> D2\n *   TSOP4838 VCC -> 5V, GND -> GND\n *   LCD I2C SDA -> A4, SCL -> A5\n *   LCD I2C VCC -> 5V, GND -> GND\n *   IR Remote - click any button on the canvas remote to send a code.\n */\n\n#include <IRremote.h>\n#include <Wire.h>\n#include <LiquidCrystal_I2C.h>\n\nconst int RECV_PIN = 2;\nIRrecv irrecv(RECV_PIN);\ndecode_results results;\nLiquidCrystal_I2C lcd(0x27, 16, 2);\n\nunsigned long lastCode = 0;\nint pressCount = 0;\n\nvoid setup() {\n  Serial.begin(115200);\n  irrecv.enableIRIn();\n  \n  lcd.init();\n  lcd.backlight();\n  lcd.setCursor(0, 0);\n  lcd.print(\"IR Remote Decoder\");\n  lcd.setCursor(0, 1);\n  lcd.print(\"Press a button...\");\n  \n  Serial.println(\"IR Remote Decoder with LCD ready\");\n  Serial.println(\"Press a button on the remote...\");\n}\n\nvoid loop() {\n  if (irrecv.decode(&results)) {\n    if (results.value != 0xFFFFFFFF) {\n      lastCode = results.value;\n      pressCount++;\n      \n      Serial.print(\"Code: 0x\");\n      Serial.print(results.value, HEX);\n      Serial.print(\"  Protocol: \");\n      Serial.println(results.decode_type);\n      \n      lcd.clear();\n      lcd.setCursor(0, 0);\n      lcd.print(\"Code: 0x\");\n      lcd.print(results.value, HEX);\n      \n      lcd.setCursor(0, 1);\n      lcd.print(\"Presses: \");\n      lcd.print(pressCount);\n      lcd.print(\"  P:\");\n      lcd.print(results.decode_type);\n    }\n    irrecv.resume();\n  }\n}"
   },
   {
+    "id": "jk_flip_flop_test",
+    "name": "JK FLIP-FLOP TEST",
+    "icon": "🔧",
+    "desc": "A custom JK FLIP-FLOP TEST circuit example.",
+    "tags": [
+      "custom",
+      "circuit"
+    ],
+    "circuit": {
+      "components": [
+        {
+          "id": "comp_1793861179170_tmb52",
+          "type": "ic_74hc76",
+          "x": 140,
+          "y": 115,
+          "rotation": 1,
+          "props": {}
+        },
+        {
+          "id": "comp_1793861197908_0wicp",
+          "type": "power_5v",
+          "x": 110,
+          "y": 225,
+          "rotation": 0,
+          "props": {}
+        },
+        {
+          "id": "comp_1793861200299_9nbfm",
+          "type": "power_gnd",
+          "x": 280,
+          "y": 235,
+          "rotation": 0,
+          "props": {}
+        },
+        {
+          "id": "comp_1793861227836_ntv8t",
+          "type": "logic_level_in",
+          "x": 80,
+          "y": 70,
+          "rotation": 0,
+          "props": {
+            "level": 0
+          }
+        },
+        {
+          "id": "comp_1793861230211_dilj8",
+          "type": "logic_level_in",
+          "x": 80,
+          "y": 95,
+          "rotation": 0,
+          "props": {
+            "level": 0
+          }
+        },
+        {
+          "id": "comp_1793861231644_rzx50",
+          "type": "logic_level_in",
+          "x": 80,
+          "y": 125,
+          "rotation": 0,
+          "props": {
+            "level": 0
+          }
+        },
+        {
+          "id": "comp_1793861315604_go6je",
+          "type": "logic_level_out",
+          "x": 325,
+          "y": 75,
+          "rotation": 0,
+          "props": {}
+        },
+        {
+          "id": "comp_1793861316789_05ay4",
+          "type": "logic_level_out",
+          "x": 325,
+          "y": 110,
+          "rotation": 0,
+          "props": {}
+        },
+        {
+          "id": "comp_1793862186492_e0s8w",
+          "type": "logic_level_in",
+          "x": 80,
+          "y": 0,
+          "rotation": 0,
+          "props": {
+            "level": 1
+          }
+        },
+        {
+          "id": "comp_1793862187564_s2g5y",
+          "type": "logic_level_in",
+          "x": 80,
+          "y": 30,
+          "rotation": 0,
+          "props": {
+            "level": 0
+          }
+        }
+      ],
+      "wires": [
+        {
+          "id": "wire_1793861214948_8cfqt",
+          "from": {
+            "instId": "comp_1793861179170_tmb52",
+            "pinId": "GND"
+          },
+          "to": {
+            "instId": "comp_1793861200299_9nbfm",
+            "pinId": "gnd"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "wire_1793861220989_qrhnw",
+          "from": {
+            "instId": "comp_1793861179170_tmb52",
+            "pinId": "VCC"
+          },
+          "to": {
+            "instId": "comp_1793861197908_0wicp",
+            "pinId": "vcc"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "wire_1793861290859_x9ua1",
+          "from": {
+            "instId": "comp_1793861179170_tmb52",
+            "pinId": "1J"
+          },
+          "to": {
+            "instId": "comp_1793861227836_ntv8t",
+            "pinId": "out"
+          },
+          "color": null,
+          "waypoints": [
+            {
+              "x": 159,
+              "y": 123
+            },
+            {
+              "x": 159,
+              "y": 78
+            }
+          ],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "wire_1793861321037_2t38d",
+          "from": {
+            "instId": "comp_1793861179170_tmb52",
+            "pinId": "1Q"
+          },
+          "to": {
+            "instId": "comp_1793861315604_go6je",
+            "pinId": "in"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "wire_1793861324033_1cdib",
+          "from": {
+            "instId": "comp_1793861179170_tmb52",
+            "pinId": "1Qn"
+          },
+          "to": {
+            "instId": "comp_1793861316789_05ay4",
+            "pinId": "in"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "wire_1793861367268_vdqjx",
+          "from": {
+            "instId": "comp_1793861179170_tmb52",
+            "pinId": "1CLK"
+          },
+          "to": {
+            "instId": "comp_1793861231644_rzx50",
+            "pinId": "out"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "wire_1793861376469_tphrh",
+          "from": {
+            "instId": "comp_1793861179170_tmb52",
+            "pinId": "1K"
+          },
+          "to": {
+            "instId": "comp_1793861230211_dilj8",
+            "pinId": "out"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "wire_1793862194605_agff9",
+          "from": {
+            "instId": "comp_1793861179170_tmb52",
+            "pinId": "1PRE"
+          },
+          "to": {
+            "instId": "comp_1793862186492_e0s8w",
+            "pinId": "out"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "wire_1793862198613_7vlzd",
+          "from": {
+            "instId": "comp_1793861179170_tmb52",
+            "pinId": "1CLR"
+          },
+          "to": {
+            "instId": "comp_1793862187564_s2g5y",
+            "pinId": "out"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        }
+      ],
+      "annotations": [
+        {
+          "id": "text_1793861246291_za5vq",
+          "text": "J",
+          "x": 40,
+          "y": 70
+        },
+        {
+          "id": "text_1793861249707_pqek6",
+          "text": "K",
+          "x": 35,
+          "y": 100
+        },
+        {
+          "id": "text_1793861255195_9qmud",
+          "text": "CK",
+          "x": 30,
+          "y": 135
+        },
+        {
+          "id": "text_1793862207636_37y93",
+          "text": "PR",
+          "x": 35,
+          "y": 0
+        },
+        {
+          "id": "text_1793862214036_wz1fh",
+          "text": "CLR",
+          "x": 35,
+          "y": 30
+        }
+      ],
+      "plcProgram": {
+        "mode": "code",
+        "rungs": [
+          {
+            "output": "Q0_0",
+            "elements": [
+              {
+                "type": "NO",
+                "input": "I0_0"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "files": {
+      "sketch.ino": "void setup() {\n\n}\n\nvoid loop() {\n\n}"
+    }
+  },
+  {
     "id": "joystick_led",
     "name": "Joystick LED Control",
     "icon": "🕹️",

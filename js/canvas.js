@@ -1842,13 +1842,6 @@ class CircuitCanvas {
     this._notifySelectionChange();
   }
 
-  _notifySelectionChange() {
-    if (typeof this.onSelectionChange === 'function') {
-      const selected = (this.components || []).filter(c => c && c.selected);
-      this.onSelectionChange(selected);
-    }
-  }
-
   rotateSelected() {
     const selComps = this.components.filter(c => c.selected);
     if (selComps.length === 0 && this.selected) selComps.push(this.selected);

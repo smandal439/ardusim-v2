@@ -197,6 +197,8 @@ class App {
     clearBtn?.addEventListener('click', () => this.clearCanvas());
     exportBtn?.addEventListener('click', () => this.exportImage());
     canvasTextBtn?.addEventListener('click', () => this.canvas?.startTextPlacement());
+    get('btn-cancel-wiring')?.addEventListener('click', () => this.canvas?._endWiring());
+    get('btn-cancel-placing')?.addEventListener('click', () => this.canvas?.cancelPlacing());
     formatBtn?.addEventListener('click', () => this.formatCode());
     verifyBtn?.addEventListener('click', () => this.verify());
     // Logo click ← go to home page
@@ -528,6 +530,7 @@ class App {
       // Initial sync — if already in placing mode from a previous session
       this.canvas.onPlacingChanged(this.canvas.placingType != null);
       this.canvas.onContextMenu = (inst, x, y) => this._showContextMenu(inst, x, y);
+      this.canvas.onSelectionChange = (state) => this._updateMobileCanvasActions(state);
       this._refreshCanvasSummary();
     }
   }
@@ -1978,6 +1981,7 @@ _newProject() {
             if (this.canvas) {
               this.canvas.startPlacing(v.id);
               this.showToast(`${v.name} selected — click on canvas to place`, 'info');
+              if (this._isMobile) this._closeAllMobileSheets();
             }
           });
           menu.appendChild(btn);
@@ -2013,6 +2017,7 @@ _newProject() {
           if (this.canvas) {
             this.canvas.startPlacing(id);
             this.showToast(`${def.name} selected — click on canvas to place`, 'info');
+            if (this._isMobile) this._closeAllMobileSheets();
           }
         });
         // Hover tooltip showing full description
@@ -4168,9 +4173,9 @@ _newProject() {
       }
     } else if (sheetId === 'sheet-editor') {
       const body = document.getElementById('sheet-editor-body');
-      const editorContainer = document.getElementById('editor-container');
-      if (body && editorContainer) {
-        body.appendChild(editorContainer);
+      const editorMain = document.querySelector('.editor-main');
+      if (body && editorMain) {
+        body.appendChild(editorMain);
         if (this.editor?.editor) {
           setTimeout(() => this.editor.editor.layout?.(), 100);
         }
@@ -4185,6 +4190,9 @@ _newProject() {
         }
       }
     }
+
+    const actionsBar = document.getElementById('mobile-canvas-actions');
+    if (actionsBar) actionsBar.classList.add('hidden');
 
     overlay.classList.add('active');
     sheet.classList.add('open');
@@ -4205,13 +4213,18 @@ _newProject() {
 
     // Return moved DOM elements to their original positions
     if (this._isMobile) {
-      // Return editor container
+      // Return editor main container (preserving tabs and editor container hierarchy)
       const editorBody = document.getElementById('sheet-editor-body');
-      const editorContainer = document.getElementById('editor-container');
-      if (editorBody && editorContainer && editorBody.contains(editorContainer)) {
-        const panelEditor = document.getElementById('panel-editor');
-        if (panelEditor) {
-          panelEditor.appendChild(editorContainer);
+      const editorMain = document.querySelector('.editor-main');
+      if (editorBody && editorMain && editorBody.contains(editorMain)) {
+        const editorBodyContainer = document.querySelector('#panel-editor .panel-body') || document.getElementById('panel-editor');
+        if (editorBodyContainer) {
+          const resizer = document.getElementById('file-explorer-resizer');
+          if (resizer && resizer.parentNode === editorBodyContainer) {
+            resizer.after(editorMain);
+          } else {
+            editorBodyContainer.appendChild(editorMain);
+          }
           if (this.editor?.editor) {
             setTimeout(() => this.editor.editor.layout?.(), 100);
           }
@@ -4230,15 +4243,23 @@ _newProject() {
         }
       }
 
-      // Return serial pane
+      // Return serial pane to bottom panel body
       const serialBody = document.getElementById('sheet-serial-body');
       const serialPane = document.getElementById('pane-serial');
       if (serialBody && serialPane && serialBody.contains(serialPane)) {
-        const bottomPanel = document.getElementById('bottom-panel');
-        if (bottomPanel) bottomPanel.appendChild(serialPane);
+        const btmBody = document.getElementById('btm-panel-body') || document.getElementById('bottom-panel');
+        if (btmBody) btmBody.appendChild(serialPane);
         if (window.SerialMonitor) {
           setTimeout(() => window.SerialMonitor.rebind(), 50);
         }
+      }
+
+      if (this.canvas) {
+        this._updateMobileCanvasActions({
+          selected: this.canvas.selected,
+          selectedWire: this.canvas.selectedWire,
+          selectedAnnotation: this.canvas.selectedAnnotation
+        });
       }
     }
   }
@@ -4303,6 +4324,172 @@ _newProject() {
       applyBtn._handler = handler;
     }
     this._showModal('modal-board-settings');
+  }
+
+  _updateMobileCanvasActions(state) {
+    const bar = document.getElementById('mobile-canvas-actions');
+    if (!bar) return;
+
+    const isMobile = this._isMobile ?? (typeof window !== 'undefined' && window.matchMedia?.('(max-width: 768px)').matches);
+    if (!isMobile || !state) {
+      bar.classList.add('hidden');
+      bar.innerHTML = '';
+      return;
+    }
+
+    const { selected, selectedWire, selectedAnnotation } = state;
+
+    if (selected) {
+      bar.classList.remove('hidden');
+      const def = window.ArduinoComponents?.COMPONENT_DEFS?.[selected.type];
+      const title = selected.props?.label || def?.name || selected.type || 'Part';
+      bar.innerHTML = `
+        <div class="mob-actions-wrap">
+          <span class="mob-action-title">${this._escHtml(title)}</span>
+          <div class="mob-action-buttons">
+            <button type="button" class="mob-action-btn" id="mob-action-rotate" title="Rotate 90°">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M11.534 7h3.932a.25.25 0 0 1 .192.41l-1.966 2.36a.25.25 0 0 1-.384 0l-1.966-2.36a.25.25 0 0 1 .192-.41zm-11 2h3.932a.25.25 0 0 0 .192-.41L2.692 6.23a.25.25 0 0 0-.384 0L.342 8.59A.25.25 0 0 0 .534 9z"/>
+                <path fill-rule="evenodd" d="M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 1 1-.771-.636A6.002 6.002 0 0 1 13.917 7H12.9A5.002 5.002 0 0 0 8 3zM3.1 9a5.002 5.002 0 0 0 8.757 2.182.5.5 0 1 1 .771.636A6.002 6.002 0 0 1 2.083 9H3.1z"/>
+              </svg>
+              <span>Rotate</span>
+            </button>
+            <button type="button" class="mob-action-btn" id="mob-action-props" title="Edit Properties">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z"/>
+              </svg>
+              <span>Props</span>
+            </button>
+            <button type="button" class="mob-action-btn" id="mob-action-duplicate" title="Duplicate">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M4 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1zM2 5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-1h1v1a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1v1z"/>
+              </svg>
+              <span>Clone</span>
+            </button>
+            <button type="button" class="mob-action-btn mob-btn-danger" id="mob-action-delete" title="Delete">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+              </svg>
+              <span>Delete</span>
+            </button>
+            <button type="button" class="mob-action-btn" id="mob-action-done" title="Deselect" aria-label="Deselect">
+              <span>✕</span>
+            </button>
+          </div>
+        </div>
+      `;
+
+      bar.querySelector('#mob-action-rotate')?.addEventListener('click', () => {
+        this.canvas?.rotateSelected();
+      });
+      bar.querySelector('#mob-action-props')?.addEventListener('click', () => {
+        this.openPropsModal(selected);
+      });
+      bar.querySelector('#mob-action-duplicate')?.addEventListener('click', () => {
+        this.canvas?.duplicateSelected();
+      });
+      bar.querySelector('#mob-action-delete')?.addEventListener('click', () => {
+        this.canvas?.deleteSelected();
+      });
+      bar.querySelector('#mob-action-done')?.addEventListener('click', () => {
+        this.canvas?.deselectAll();
+      });
+      return;
+    }
+
+    if (selectedWire) {
+      bar.classList.remove('hidden');
+      const colors = [
+        { code: '#e53935', title: 'Red' },
+        { code: '#212121', title: 'Black' },
+        { code: '#1e88e5', title: 'Blue' },
+        { code: '#43a047', title: 'Green' },
+        { code: '#fdd835', title: 'Yellow' },
+        { code: '#fb8c00', title: 'Orange' }
+      ];
+      const curStyle = selectedWire.routeStyle || 'orthogonal';
+      const nextStyle = curStyle === 'bezier' ? 'orthogonal' : 'bezier';
+      const styleLabel = curStyle === 'bezier' ? 'Curved' : 'Orthogonal';
+
+      bar.innerHTML = `
+        <div class="mob-actions-wrap">
+          <div class="mob-wire-colors">
+            ${colors.map(c => `
+              <button type="button" class="mob-color-btn ${selectedWire.color === c.code ? 'active' : ''}" data-color="${c.code}" style="background-color: ${c.code}" title="${c.title}" aria-label="${c.title}"></button>
+            `).join('')}
+          </div>
+          <div class="mob-action-buttons">
+            <button type="button" class="mob-action-btn" id="mob-wire-style" title="Toggle wire curve">
+              <span>${styleLabel}</span>
+            </button>
+            <button type="button" class="mob-action-btn mob-btn-danger" id="mob-wire-delete" title="Delete wire">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+              </svg>
+              <span>Delete</span>
+            </button>
+            <button type="button" class="mob-action-btn" id="mob-wire-done" title="Deselect wire" aria-label="Deselect wire">
+              <span>✕</span>
+            </button>
+          </div>
+        </div>
+      `;
+
+      bar.querySelectorAll('.mob-color-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          this.canvas?.setWireColor(selectedWire.id, btn.dataset.color);
+          this._updateMobileCanvasActions(this.canvas ? {
+            selected: this.canvas.selected,
+            selectedWire: this.canvas.selectedWire,
+            selectedAnnotation: this.canvas.selectedAnnotation
+          } : null);
+        });
+      });
+      bar.querySelector('#mob-wire-style')?.addEventListener('click', () => {
+        this.canvas?.setWireStyle(selectedWire.id, nextStyle);
+        this._updateMobileCanvasActions(this.canvas ? {
+          selected: this.canvas.selected,
+          selectedWire: this.canvas.selectedWire,
+          selectedAnnotation: this.canvas.selectedAnnotation
+        } : null);
+      });
+      bar.querySelector('#mob-wire-delete')?.addEventListener('click', () => {
+        this.canvas?.deleteSelected();
+      });
+      bar.querySelector('#mob-wire-done')?.addEventListener('click', () => {
+        this.canvas?.deselectAll();
+      });
+      return;
+    }
+
+    if (selectedAnnotation) {
+      bar.classList.remove('hidden');
+      bar.innerHTML = `
+        <div class="mob-actions-wrap">
+          <span class="mob-action-title">Text</span>
+          <div class="mob-action-buttons">
+            <button type="button" class="mob-action-btn mob-btn-danger" id="mob-ann-delete" title="Delete">
+              <span>Delete</span>
+            </button>
+            <button type="button" class="mob-action-btn" id="mob-ann-done" title="Deselect" aria-label="Deselect">
+              <span>✕</span>
+            </button>
+          </div>
+        </div>
+      `;
+      bar.querySelector('#mob-ann-delete')?.addEventListener('click', () => {
+        this.canvas?.deleteSelected();
+      });
+      bar.querySelector('#mob-ann-done')?.addEventListener('click', () => {
+        this.canvas?.deselectAll();
+      });
+      return;
+    }
+
+    bar.classList.add('hidden');
+    bar.innerHTML = '';
   }
 }
 
