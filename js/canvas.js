@@ -1167,6 +1167,7 @@ class CircuitCanvas {
   _handleFuncGenButtonClick(inst, key) {
     const rs = inst.runtimeState || {};
     const props = inst.props || {};
+    const defs = window.ArduinoComponents && window.ArduinoComponents.COMPONENT_DEFS;
 
     const cycleOptions = (field, options) => {
       const cur = rs[field] !== undefined ? rs[field] : (props[field] ?? options[0]);
@@ -1176,7 +1177,8 @@ class CircuitCanvas {
       props[field] = next;
     };
 
-    const waveOpts = ['sine', 'square', 'triangle', 'sawtooth', 'ramp_down', 'pulse', 'exp_rise', 'ecg', 'staircase', 'noise', 'dc'];
+    const waveOpts = (defs && defs.func_gen && defs.func_gen._waveIds) ||
+      ['sine', 'square', 'triangle', 'sawtooth', 'ramp_down', 'pulse', 'exp_rise', 'ecg', 'staircase', 'noise', 'dc', 'pattern'];
 
     const freqSteps = [1, 10, 100, 1000, 10000, 100000, 1000000];
     const shiftFreq = (field, dir) => {

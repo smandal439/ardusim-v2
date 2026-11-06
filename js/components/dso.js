@@ -219,6 +219,13 @@ defComp({
         case 'triangle': v = tau < dutyFrac ? -1 + 2 * (tau / dutyFrac) : 1 - 2 * ((tau - dutyFrac) / (1 - dutyFrac)); break;
         case 'sawtooth': v = 2 * tau - 1; break;
         case 'ramp_down': v = 1 - 2 * tau; break;
+        case 'staircase': v = Math.floor(tau * 8.0) / 3.5 - 1.0; break;
+        case 'pattern': {
+          const pat = String(fgProps[isCh1 ? 'ch1_pattern' : 'ch2_pattern'] || '1110010').match(/[01]/g) || ['1', '1', '1', '0', '0', '1', '0'];
+          const bIdx = Math.min(pat.length - 1, Math.max(0, Math.floor(tau * pat.length)));
+          v = pat[bIdx] === '1' ? 1 : -1;
+          break;
+        }
         case 'noise':    v = Math.sin(sampleT * freq * 137.5) * 0.7 + Math.sin(sampleT * freq * 239.1) * 0.3; break;
         case 'dc':       v = 0; break;
         default:         v = Math.sin(2 * Math.PI * tau); break;

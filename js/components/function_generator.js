@@ -18,6 +18,16 @@ function _fgBool(value) {
   return Boolean(value);
 }
 
+function _fgParsePattern(value) {
+  if (typeof value === 'string') {
+    const bits = value.match(/[01]/g);
+    if (bits && bits.length > 0) return bits;
+  } else if (Array.isArray(value) && value.length > 0) {
+    return value.map(b => (b === 1 || b === '1' ? '1' : '0'));
+  }
+  return ['1', '1', '1', '0', '0', '1', '0'];
+}
+
 const FG_WAVEFORMS = [
   { id: 'sine',      label: 'Sine',           badge: 'SIN' },
   { id: 'square',    label: 'Square',         badge: 'SQR' },
@@ -30,11 +40,12 @@ const FG_WAVEFORMS = [
   { id: 'staircase', label: 'Staircase',      badge: 'STR' },
   { id: 'noise',     label: 'Noise',          badge: 'NOI' },
   { id: 'dc',        label: 'DC Level',       badge: 'DC'  },
+  { id: 'pattern',   label: 'Bit Pattern',    badge: 'BIT' },
 ];
 
 const FG_WAVE_IDS = FG_WAVEFORMS.map(w => w.id);
 
-function _fgSampleRaw(wave, tau, t, freq, duty) {
+function _fgSampleRaw(wave, tau, t, freq, duty, pattern) {
   let normalized = 0;
   switch (wave) {
     case 'square':
@@ -76,6 +87,13 @@ function _fgSampleRaw(wave, tau, t, freq, duty) {
     case 'dc':
       normalized = 0.0;
       break;
+    case 'pattern': {
+      const bits = _fgParsePattern(pattern);
+      const len = bits.length;
+      const bitIdx = Math.min(len - 1, Math.max(0, Math.floor(tau * len)));
+      normalized = bits[bitIdx] === '1' ? 1.0 : -1.0;
+      break;
+    }
     case 'sine':
     default:
       normalized = Math.sin(2.0 * Math.PI * tau);
@@ -95,7 +113,11 @@ function _fgCalcVrms(wave, amp, offset, dutyPct) {
       break;
     case 'square':
     case 'pulse':
+    case 'pattern':
       vacRms = (vpp / 2) * 2 * Math.sqrt(duty * (1 - duty));
+      if (wave === 'pattern') {
+        vacRms = vpp / 2;
+      }
       break;
     case 'triangle':
     case 'sawtooth':
@@ -120,7 +142,8 @@ defComp({
   name: 'Function Generator',
   category: 'Instruments',
   icon: '〜',
-  desc: 'Precision Dual-Channel DDS Function Generator — 11 waveforms, AM/FM/Sweep modulation, channel sync, and dual-trace phosphor display',
+  desc: 'Precision Dual-Channel DDS Function Generator — 12 waveforms (including Bit Pattern), AM/FM/Sweep modulation, channel sync, and dual-trace phosphor display',
+  _waveIds: FG_WAVE_IDS,
 
   width: 300,
   height: 190,
@@ -129,6 +152,7 @@ defComp({
     powered: 1,
     ch1_en: 1,
     ch1_wave: 'sine',
+    ch1_pattern: '1110010',
     ch1_freq: 440,
     ch1_amp: 5.0,
     ch1_offset: 0,
@@ -140,6 +164,7 @@ defComp({
 
     ch2_en: 1,
     ch2_wave: 'square',
+    ch2_pattern: '1110010',
     ch2_freq: 880,
     ch2_amp: 3.0,
     ch2_offset: 0,
@@ -159,6 +184,7 @@ defComp({
     // Channel 1 Controls
     { field: 'ch1_en', label: 'CH1 Enable', type: 'checkbox' },
     { field: 'ch1_wave', label: 'CH1 Wave', type: 'select', options: FG_WAVEFORMS.map(w => ({ value: w.id, label: w.label })) },
+    { field: 'ch1_pattern', label: 'CH1 Pattern', type: 'text' },
     { field: 'ch1_freq', label: 'CH1 Freq', type: 'number', min: 0, max: 10000000, unit: 'Hz' },
     { field: 'ch1_amp', label: 'CH1 Amp', min: 0, max: 10, step: 0.1, unit: 'Vpp' },
     { field: 'ch1_offset', label: 'CH1 Offset', min: -5, max: 5, step: 0.1, unit: 'V' },
@@ -176,6 +202,7 @@ defComp({
     // Channel 2 Controls
     { field: 'ch2_en', label: 'CH2 Enable', type: 'checkbox' },
     { field: 'ch2_wave', label: 'CH2 Wave', type: 'select', options: FG_WAVEFORMS.map(w => ({ value: w.id, label: w.label })) },
+    { field: 'ch2_pattern', label: 'CH2 Pattern', type: 'text' },
     { field: 'ch2_freq', label: 'CH2 Freq', type: 'number', min: 0, max: 10000000, unit: 'Hz' },
     { field: 'ch2_amp', label: 'CH2 Amp', min: 0, max: 10, step: 0.1, unit: 'Vpp' },
     { field: 'ch2_offset', label: 'CH2 Offset', min: -5, max: 5, step: 0.1, unit: 'V' },
@@ -222,6 +249,7 @@ defComp({
     if (!en) return 0;
 
     const wave = P(`${channel}_wave`, channel === 'ch1' ? 'sine' : 'square') || 'sine';
+    const pattern = P(`${channel}_pattern`, '1110010');
     let freq = _fgNum(P(`${channel}_freq`), channel === 'ch1' ? 440 : 880, 0, 10000000);
     const amp = _fgNum(P(`${channel}_amp`), channel === 'ch1' ? 5.0 : 3.0, 0, 10);
     const offset = _fgNum(P(`${channel}_offset`), 0, -5, 5);
@@ -268,7 +296,7 @@ defComp({
     }
 
     const tau = ((t * effFreq + effPhase) % 1.0 + 1.0) % 1.0;
-    const norm = _fgSampleRaw(wave, tau, t, effFreq, duty);
+    const norm = _fgSampleRaw(wave, tau, t, effFreq, duty, pattern);
 
     // Impedance Load Scaling (High-Z vs 50 Ohm)
     const loadMode = P('load_imp', 'highz');
@@ -539,7 +567,7 @@ defComp({
     const cardY = 88, cardH = 68, cardGap = 8;
     const cardW = (scrW - cardGap) / 2; // 120px each
 
-    const _drawCard = (cx, cy, cw, ch, label, labelColor, en, wave, freq, amp, offset, phase, duty, modMode) => {
+    const _drawCard = (cx, cy, cw, ch, label, labelColor, en, wave, freq, amp, offset, phase, duty, modMode, patternStr) => {
       ctx.fillStyle = isPowered ? '#161920' : '#101217';
       roundRect(ctx, cx, cy, cw, ch, 5);
       ctx.fill();
@@ -587,7 +615,13 @@ defComp({
       ctx.fillText('Freq: ' + _fmtFreq(freq), cx + 6, py); py += lineH;
       ctx.fillText('Amp:  ' + amp.toFixed(1) + 'Vpp', cx + 6, py); py += lineH;
       ctx.fillText('Off:  ' + (offset >= 0 ? '+' : '') + offset.toFixed(1) + 'V', cx + 6, py); py += lineH;
-      ctx.fillText('Phs:  ' + phase + '\u00B0 | ' + duty + '%', cx + 6, py); py += lineH;
+      if (wave === 'pattern') {
+        const cleanPat = String(patternStr || '1110010').replace(/[^01]/g, '');
+        const dispPat = cleanPat.length > 8 ? cleanPat.slice(0, 7) + '\u2026' : cleanPat;
+        ctx.fillText('Bit:  ' + dispPat, cx + 6, py); py += lineH;
+      } else {
+        ctx.fillText('Phs:  ' + phase + '\u00B0 | ' + duty + '%', cx + 6, py); py += lineH;
+      }
 
       // True RMS readout
       ctx.fillStyle = isPowered && en ? '#00e5ff' : '#3c4452';
@@ -598,11 +632,13 @@ defComp({
     const ch2Wave = P('ch2_wave', 'square') || 'square';
     const ch1Mod = P('ch1_mod', 'none');
     const ch2Mod = P('ch2_mod', 'none');
+    const ch1Pattern = P('ch1_pattern', '1110010');
+    const ch2Pattern = P('ch2_pattern', '1110010');
 
     _drawCard(scrX, cardY, cardW, cardH, 'CH1', '#00e5ff',
-      ch1En, ch1Wave, ch1Freq, ch1Amp, ch1Offset, ch1Phase, ch1Duty, ch1Mod);
+      ch1En, ch1Wave, ch1Freq, ch1Amp, ch1Offset, ch1Phase, ch1Duty, ch1Mod, ch1Pattern);
     _drawCard(scrX + cardW + cardGap, cardY, cardW, cardH, 'CH2', '#ff2d6d',
-      ch2En, ch2Wave, ch2Freq, ch2Amp, ch2Offset, ch2Phase, ch2Duty, ch2Mod);
+      ch2En, ch2Wave, ch2Freq, ch2Amp, ch2Offset, ch2Phase, ch2Duty, ch2Mod, ch2Pattern);
 
     // ── Interactive Control Buttons Row ──
     const _ctrlBtn = (bx, by, bw, bh, lbl, col, active) => {

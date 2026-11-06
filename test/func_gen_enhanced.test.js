@@ -63,10 +63,10 @@ const sim = {
 };
 
 describe('Enhanced Function Generator: Waveforms', () => {
-  it('declares and synthesizes all 11 waveforms', () => {
+  it('declares and synthesizes all 12 waveforms', () => {
     const expected = [
       'sine', 'square', 'triangle', 'sawtooth', 'ramp_down',
-      'pulse', 'exp_rise', 'ecg', 'staircase', 'noise', 'dc',
+      'pulse', 'exp_rise', 'ecg', 'staircase', 'noise', 'dc', 'pattern',
     ];
 
     const waveCtrl = fgDef.interactive.find(c => c.field === 'ch1_wave');
@@ -288,15 +288,15 @@ describe('Enhanced Function Generator: Interactive Buttons on Canvas', () => {
     expect(inst.props.ch2_en).toBe(0);
   });
 
-  it('cycles through all 11 waveforms with ch1Wave button', () => {
+  it('cycles through all 12 waveforms with ch1Wave button', () => {
     const inst = fgInst({ ch1_wave: 'sine' });
     const cc = CircuitCanvas.prototype;
 
     cc._handleFuncGenButtonClick.call({}, inst, 'ch1Wave');
     expect(inst.props.ch1_wave).toBe('square');
 
-    // Cycle through remaining 10 waveforms
-    for (let i = 0; i < 10; i++) {
+    // Cycle through remaining 11 waveforms
+    for (let i = 0; i < 11; i++) {
       cc._handleFuncGenButtonClick.call({}, inst, 'ch1Wave');
     }
     expect(inst.props.ch1_wave).toBe('sine');
@@ -363,5 +363,86 @@ describe('CircuitCanvas Integration: analogRead from Function Generator', () => 
 
     const val = cc._readAnalogInput.call(cc, 'esp_1', 'GPIO36');
     expect(val).toBe(1023);
+  });
+});
+
+describe('Function Generator: Bit Pattern Generator', () => {
+  it('correctly synthesizes the 7-bit sequence 1110010 across the period', () => {
+    // 1 Hz frequency = 1000ms period for 1110010 (7 bits, ~142.86ms per bit)
+    // Amp = 5Vpp, Offset = 2.5V gives 5V for '1' and 0V for '0' (TTL)
+    const inst = fgInst({
+      ch1_wave: 'pattern',
+      ch1_pattern: '1110010',
+      ch1_freq: 1,
+      ch1_amp: 5.0,
+      ch1_offset: 2.5,
+      ch1_phase: 0,
+    });
+
+    const expectedBits = [1, 1, 1, 0, 0, 1, 0];
+    const bitDuration = 1000 / 7;
+
+    for (let bitIdx = 0; bitIdx < expectedBits.length; bitIdx++) {
+      const midBitTime = (bitIdx + 0.5) * bitDuration;
+      fgDef.step(inst, { simTime: midBitTime });
+      const v = inst.runtimeState.ch1_voltage;
+      const expectedV = expectedBits[bitIdx] === 1 ? 5.0 : 0.0;
+      expect(v).toBeCloseTo(expectedV, 2);
+    }
+  });
+
+  it('synthesizes custom bit patterns and handles spacing/delimiters', () => {
+    const inst = fgInst({
+      ch1_wave: 'pattern',
+      ch1_pattern: '1 0 1 0',
+      ch1_freq: 10, // 100ms period, 25ms per bit
+      ch1_amp: 3.3,
+      ch1_offset: 1.65,
+      ch1_phase: 0,
+    });
+
+    // Bit 0: '1' at t = 10ms
+    fgDef.step(inst, { simTime: 10 });
+    expect(inst.runtimeState.ch1_voltage).toBeCloseTo(3.3, 2);
+
+    // Bit 1: '0' at t = 35ms
+    fgDef.step(inst, { simTime: 35 });
+    expect(inst.runtimeState.ch1_voltage).toBeCloseTo(0.0, 2);
+
+    // Bit 2: '1' at t = 60ms
+    fgDef.step(inst, { simTime: 60 });
+    expect(inst.runtimeState.ch1_voltage).toBeCloseTo(3.3, 2);
+
+    // Bit 3: '0' at t = 85ms
+    fgDef.step(inst, { simTime: 85 });
+    expect(inst.runtimeState.ch1_voltage).toBeCloseTo(0.0, 2);
+  });
+
+  it('supports independent bit patterns on CH1 and CH2', () => {
+    const inst = fgInst({
+      ch1_wave: 'pattern',
+      ch1_pattern: '1110010',
+      ch1_freq: 1,
+      ch1_amp: 5.0,
+      ch1_offset: 2.5,
+      ch1_phase: 0,
+
+      ch2_wave: 'pattern',
+      ch2_pattern: '0001101',
+      ch2_freq: 1,
+      ch2_amp: 5.0,
+      ch2_offset: 2.5,
+      ch2_phase: 0,
+    });
+
+    // Sample at bit 0 (t = 50ms): CH1 is 1 (5V), CH2 is 0 (0V)
+    fgDef.step(inst, { simTime: 50 });
+    expect(inst.runtimeState.ch1_voltage).toBeCloseTo(5.0, 2);
+    expect(inst.runtimeState.ch2_voltage).toBeCloseTo(0.0, 2);
+
+    // Sample at bit 3 (t = 500ms): CH1 is 0 (0V), CH2 is 1 (5V)
+    fgDef.step(inst, { simTime: 500 });
+    expect(inst.runtimeState.ch1_voltage).toBeCloseTo(0.0, 2);
+    expect(inst.runtimeState.ch2_voltage).toBeCloseTo(5.0, 2);
   });
 });
