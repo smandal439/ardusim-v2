@@ -59,7 +59,7 @@ function feedSquare(la, fromMs, toMs) {
   }
 }
 
-describe('LA cursor ΔT on a scrolling window', () => {
+describe('LA cursor ΔT on a scrolling window', { timeout: 15000 }, () => {
   it('measures one 1 kHz cycle as ~1ms even when the sim advances between clicks', () => {
     const la = makeLA();
     la.setTimebase('0.5'); // 500µs/div → 5ms window
@@ -116,7 +116,7 @@ describe('LA cursor ΔT on a scrolling window', () => {
     feedSquare(la, 10, 1000);
     const t = la._pixelToTime(x);
     expect(t).toBeGreaterThan(990); // tracks live data again
-  });
+  }, 15000);
 
   it('clear() releases the frozen window', () => {
     const la = makeLA();

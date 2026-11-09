@@ -8,6 +8,8 @@ const projectGlobals = {
   roundRect: 'readonly',
   drawSelectionRect: 'readonly',
   Component: 'readonly',
+  COMPONENT_DEFS: 'readonly',
+  COMPONENT_CLASSES: 'readonly',
   PIN_TYPE: 'readonly',
   defComp: 'readonly',
   registerComponent: 'readonly',
