@@ -290,9 +290,14 @@ class ElectricalEngine {
     };
 
     const transistors = [];
+    const diodes = [];
     for (const inst of this.components) {
       if (inst.type === 'npn_transistor' || inst.type === 'pnp_transistor') {
         transistors.push(inst);
+        continue;
+      }
+      if (inst.type === 'diode_1n4007') {
+        diodes.push(inst);
         continue;
       }
 
@@ -301,14 +306,8 @@ class ElectricalEngine {
       // single linear resistance cannot model their forward drop — a 20Ω
       // edge would wrongly divide the rail through the cathode ground path.
       // (measureResistance() has its own LED/diode edges for continuity.)
-      const net1 = this.getNetForPin(inst.id, 'p1');
-      const net2 = this.getNetForPin(inst.id, 'p2');
-      let bulbNet1 = net1;
-      let bulbNet2 = net2;
-      if (inst.type === 'bulb_12v') {
-        bulbNet1 = this.getNetForPin(inst.id, 'anode');
-        bulbNet2 = this.getNetForPin(inst.id, 'cathode');
-      }
+      const net1 = this.getNetForPin(inst.id, inst.type === 'bulb_12v' ? 'anode' : 'p1');
+      const net2 = this.getNetForPin(inst.id, inst.type === 'bulb_12v' ? 'cathode' : 'p2');
       if (!net1 || !net2) continue;
 
       switch (inst.type) {
@@ -322,20 +321,8 @@ class ElectricalEngine {
           // DC steady-state: capacitor is open circuit (very high resistance)
           addEdge(net1, net2, 1e9);
           break;
-        case 'diode_1n4007': {
-          // Simple diode model: ~0.7V forward drop, high reverse resistance
-          // Approximated as a low resistance forward-biased path
-          const v1 = net1.voltage || 0;
-          const v2 = net2.voltage || 0;
-          if (v1 > v2) {
-            addEdge(net1, net2, 10); // forward-biased: low resistance
-          } else {
-            addEdge(net1, net2, 1e9); // reverse-biased: open circuit
-          }
-          break;
-        }
         case 'bulb_12v':
-          if (bulbNet1 && bulbNet2) addEdge(bulbNet1, bulbNet2, 12); // filament
+          addEdge(net1, net2, 12); // filament
           break;
         case 'led':
         case 'led_green':
@@ -389,8 +376,18 @@ class ElectricalEngine {
 
     relaxVoltages();
 
-    // Use the first-pass base/emitter voltages to model each BJT as a
-    // voltage-controlled collector/emitter switch.
+    // Use first-pass junction voltages to model diodes and BJTs as
+    // voltage-controlled switches.
+    for (const inst of diodes) {
+      const anode = this.getNetForPin(inst.id, 'anode');
+      const cathode = this.getNetForPin(inst.id, 'cathode');
+      const forwardBiased = (anode?.voltage ?? 0) - (cathode?.voltage ?? 0) >= 0.65;
+
+      inst.runtimeState = inst.runtimeState || {};
+      inst.runtimeState.conducting = forwardBiased;
+      if (forwardBiased) addEdge(anode, cathode, 10);
+    }
+
     for (const inst of transistors) {
       const base = this.getNetForPin(inst.id, 'base');
       const emitter = this.getNetForPin(inst.id, 'emitter');
@@ -406,7 +403,8 @@ class ElectricalEngine {
       }
     }
 
-    if (transistors.some(inst => inst.runtimeState.conducting)) {
+    if (diodes.some(inst => inst.runtimeState.conducting)
+      || transistors.some(inst => inst.runtimeState.conducting)) {
       relaxVoltages();
     }
 
@@ -865,8 +863,8 @@ class ElectricalEngine {
       } else if ((inst.type === 'npn_transistor' || inst.type === 'pnp_transistor')
         && inst.runtimeState?.conducting) {
         addEdge(key('collector'), key('emitter'), 10);
-      } else if (inst.type === 'diode_1n4007') {
-        addEdge(key('anode'), key('cathode'), 0.7);
+      } else if (inst.type === 'diode_1n4007' && inst.runtimeState?.conducting) {
+        addEdge(key('anode'), key('cathode'), 10);
       } else if (inst.type === 'bulb_12v') {
         addEdge(key('anode'), key('cathode'), 12);
       } else if (inst.type === 'led' || inst.type === 'led_green' || inst.type === 'led_blue'

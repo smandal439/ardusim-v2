@@ -5170,13 +5170,9 @@ class CircuitCanvas {
 
         /* â”€â”€ 1N4007 Diode (pass-through with forward voltage drop) â”€â”€ */
         case 'diode_1n4007': {
-          // Diode participates in _tracePinNet for electrical simulation
-          // Here we just track its conducting state for visual feedback
-          const anodeNet = this._tracePinNet(inst.id, 'anode');
-          const cathodeNet = this._tracePinNet(inst.id, 'cathode');
-          const hasSource = anodeNet.sources.length > 0;
-          const hasGround = cathodeNet.grounds.length > 0;
-          inst.runtimeState.conducting = hasSource && hasGround;
+          const anodeVoltage = this.engine.getVoltageAtPin(inst.id, 'anode');
+          const cathodeVoltage = this.engine.getVoltageAtPin(inst.id, 'cathode');
+          inst.runtimeState.conducting = anodeVoltage - cathodeVoltage >= 0.65;
           break;
         }
 

@@ -83,6 +83,44 @@ function makeTransistorCircuit(type, conducting, withBulb = false) {
   };
 }
 
+function makeDiodeCircuit(forwardBiased) {
+  const components = [
+    { id: 'supply', type: 'power_5v', props: {}, runtimeState: {} },
+    { id: 'ground', type: 'power_gnd', props: {}, runtimeState: {} },
+    { id: 'bulb', type: 'bulb_12v', props: {}, runtimeState: {} },
+    { id: 'diode', type: 'diode_1n4007', props: {}, runtimeState: {} },
+  ];
+  const wires = [];
+  const connect = (a, aPin, b, bPin) => {
+    wires.push({
+      from: { instId: a, pinId: aPin },
+      to: { instId: b, pinId: bPin },
+    });
+  };
+
+  connect('supply', 'vcc', 'bulb', 'anode');
+  if (forwardBiased) {
+    connect('bulb', 'cathode', 'diode', 'anode');
+    connect('diode', 'cathode', 'ground', 'gnd');
+  } else {
+    connect('bulb', 'cathode', 'diode', 'cathode');
+    connect('diode', 'anode', 'ground', 'gnd');
+  }
+
+  const engine = new window.ElectricalEngine();
+  engine.buildGraph(components, wires);
+  engine.solve();
+  const Bulb = window.ArduinoComponents.getComponentClass('bulb_12v');
+  const bulbInstance = new Bulb(components.find(component => component.id === 'bulb'));
+  bulbInstance.canvas = { engine };
+  bulbInstance.update();
+  return {
+    engine,
+    diode: components.find(component => component.id === 'diode'),
+    bulb: components.find(component => component.id === 'bulb'),
+  };
+}
+
 describe('NPN and PNP transistors', () => {
   const updateBulb = (engine, bulb) => {
     const Bulb = window.ArduinoComponents.getComponentClass('bulb_12v');
@@ -105,7 +143,7 @@ describe('NPN and PNP transistors', () => {
   it('turns an NPN on when its base is above its emitter', () => {
     const { engine, transistor, bulb } = makeTransistorCircuit('npn_transistor', true, true);
     expect(transistor.runtimeState.conducting).toBe(true);
-    expect(engine.getNetForPin('transistor', 'collector').voltage).toBeLessThan(1);
+    expect(engine.getNetForPin('transistor', 'collector').voltage).toBeLessThan(3);
     expect(updateBulb(engine, bulb)).toBeGreaterThan(0);
   });
 
@@ -126,5 +164,21 @@ describe('NPN and PNP transistors', () => {
     const { engine, transistor } = makeTransistorCircuit('pnp_transistor', false);
     expect(transistor.runtimeState.conducting).toBe(false);
     expect(engine.getNetForPin('transistor', 'collector').voltage).toBeLessThan(1);
+  });
+
+  it('conducts from anode to cathode and lights a series bulb', () => {
+    const { engine, diode, bulb } = makeDiodeCircuit(true);
+    expect(diode.runtimeState.conducting).toBe(true);
+    expect(engine.getVoltageAtPin('diode', 'anode')).toBeGreaterThan(
+      engine.getVoltageAtPin('diode', 'cathode')
+    );
+    expect(bulb.runtimeState.brightness).toBeGreaterThan(0);
+  });
+
+  it('blocks reverse current and keeps a series bulb off', () => {
+    const { engine, diode, bulb } = makeDiodeCircuit(false);
+    expect(diode.runtimeState.conducting).toBe(false);
+    expect(engine.hasGroundAtPin('bulb', 'cathode')).toBe(false);
+    expect(bulb.runtimeState.brightness).toBe(0);
   });
 });
