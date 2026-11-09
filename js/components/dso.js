@@ -143,8 +143,7 @@ defComp({
       ['ch1', 'ch2', 'ch3', 'ch4'].forEach((chId, i) => {
         const probeFactor = P(rs, inst.props, chId + '_probe', 1);
         const rawSamples = buf[chId] && buf[chId].length > 0 ? buf[chId] : null;
-        const samples = rawSamples ? rawSamples.map(v => v * probeFactor) : null;
-        inst._computeMeas[chId] = dsoComputeMeasurements(samples, measurementTime);
+        inst._computeMeas[chId] = dsoComputeMeasurements(rawSamples, measurementTime, probeFactor);
       });
       return;
     }
@@ -170,8 +169,7 @@ defComp({
       ['ch1', 'ch2', 'ch3', 'ch4'].forEach((chId) => {
         const probeFactor = P(rs, inst.props, chId + '_probe', 1);
         const rawSamples = buf[chId] && buf[chId].length > 0 ? buf[chId] : null;
-        const samples = rawSamples ? rawSamples.map(v => v * probeFactor) : null;
-        inst._computeMeas[chId] = dsoComputeMeasurements(samples, measurementTime);
+        inst._computeMeas[chId] = dsoComputeMeasurements(rawSamples, measurementTime, probeFactor);
       });
       return;
     }
@@ -318,8 +316,7 @@ defComp({
     ['ch1', 'ch2', 'ch3', 'ch4'].forEach((chId) => {
       const probeFactor = P(rs, inst.props, chId + '_probe', 1);
       const rawSamples = buf[chId] && buf[chId].length > 0 ? buf[chId] : null;
-      const samples = rawSamples ? rawSamples.map(v => v * probeFactor) : null;
-      inst._computeMeas[chId] = dsoComputeMeasurements(samples, capturedTime);
+      inst._computeMeas[chId] = dsoComputeMeasurements(rawSamples, capturedTime, probeFactor);
     });
 
   },
@@ -1118,15 +1115,24 @@ defComp({
 });
 
 /* ── Measurement Engine ── */
-function dsoComputeMeasurements(samples, measurementTime) {
+function dsoComputeMeasurements(samples, measurementTime, scale = 1) {
   if (!samples || samples.length < 2) return { vmax: 0, vmin: 0, vpp: 0, vrms: 0, mean: 0, frequency: 0, period: 0, dutyCycle: 0 };
   let vmax = -Infinity, vmin = Infinity, sum = 0, sumSq = 0;
+  let highCount = 0, firstRisingCrossing = -1, lastRisingCrossing = -1, crossingCount = 0;
+  let previous = samples[0] * scale;
   for (let i = 0; i < samples.length; i++) {
-    const v = samples[i];
+    const v = samples[i] * scale;
     if (v > vmax) vmax = v;
     if (v < vmin) vmin = v;
     sum += v;
     sumSq += v * v;
+    if (v > 0) highCount++;
+    if (i > 0 && previous < 0 && v >= 0) {
+      if (firstRisingCrossing < 0) firstRisingCrossing = i;
+      lastRisingCrossing = i;
+      crossingCount++;
+    }
+    previous = v;
   }
   if (!isFinite(vmax)) vmax = 0;
   if (!isFinite(vmin)) vmin = 0;
@@ -1134,24 +1140,14 @@ function dsoComputeMeasurements(samples, measurementTime) {
   const mean = samples.length > 0 ? sum / samples.length : 0;
   const vrms = samples.length > 0 ? Math.sqrt(sumSq / samples.length) : 0;
 
-  // Frequency from zero crossings
-  const risingCrossings = [];
-  for (let i = 1; i < samples.length; i++) {
-    if (samples[i - 1] < 0 && samples[i] >= 0) risingCrossings.push(i);
-  }
   let frequency = 0;
-  if (risingCrossings.length > 1 && measurementTime > 0) {
+  if (crossingCount > 1 && measurementTime > 0) {
     const sampleRate = (samples.length - 1) / measurementTime;
-    const averagePeriodSamples = (risingCrossings[risingCrossings.length - 1] - risingCrossings[0]) / (risingCrossings.length - 1);
+    const averagePeriodSamples = (lastRisingCrossing - firstRisingCrossing) / (crossingCount - 1);
     frequency = averagePeriodSamples > 0 ? sampleRate / averagePeriodSamples : 0;
   }
   const period = frequency > 0 ? 1 / frequency : 0;
 
-  // Duty cycle
-  let highCount = 0;
-  for (let i = 0; i < samples.length; i++) {
-    if (samples[i] > 0) highCount++;
-  }
   const dutyCycle = samples.length > 0 ? (highCount / samples.length) * 100 : 0;
 
   return { vmax, vmin, vpp, vrms, mean, frequency, period, dutyCycle };

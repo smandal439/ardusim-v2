@@ -61,11 +61,11 @@ function loadScripts(files, names) {
   return fn(global.window, global.document);
 }
 
-const { COMPONENT_DEFS, clampPropValue, _fgNum, _fgBool, _dsoProp, _dsoBool, _dsoAutoSet } = loadScripts([
+const { COMPONENT_DEFS, clampPropValue, _fgNum, _fgBool, _dsoProp, _dsoBool, _dsoAutoSet, dsoComputeMeasurements } = loadScripts([
   'js/components/base.js',
   'js/components/function_generator.js',
   'js/components/dso.js',
-], ['COMPONENT_DEFS', 'clampPropValue', '_fgNum', '_fgBool', '_dsoProp', '_dsoBool', '_dsoAutoSet']);
+], ['COMPONENT_DEFS', 'clampPropValue', '_fgNum', '_fgBool', '_dsoProp', '_dsoBool', '_dsoAutoSet', 'dsoComputeMeasurements']);
 
 const { DSOFullscreen, _dsoFsProp, _dsoFsBool, _dsoFsSliderProgress, _dsoFsSliderValue } = loadScripts([
   'js/dso-fullscreen.js',
@@ -344,6 +344,100 @@ describe('fullscreen DSO control wiring', () => {
     const els = drawPanel(fs, makeDsoInst());
     expect(els.dsoMode, 'View control').toBeTruthy();
     expect(els.dsoMode.type).toBe('select');
+  });
+});
+
+describe('simulation rendering hot paths', () => {
+  it('avoids scanning boards for each component when the second simulator is absent', () => {
+    const previousSim = window.ArduinoSim;
+    const previousApp = window.App;
+    const sim = {};
+    window.ArduinoSim = sim;
+    window.App = { sim2: null };
+    const canvas = Object.create(CircuitCanvas.prototype);
+    canvas.getAllBoardInsts = () => { throw new Error('board scan should not run'); };
+
+    try {
+      expect(canvas._getSimForInst({ type: 'resistor' })).toBe(sim);
+    } finally {
+      window.ArduinoSim = previousSim;
+      window.App = previousApp;
+    }
+  });
+
+  it('resolves dual-board component simulators once per render', () => {
+    const previousSim = window.ArduinoSim;
+    const previousApp = window.App;
+    const previousComponents = window.ArduinoComponents;
+    const sim1 = { isRunning: true };
+    const sim2 = { isRunning: true };
+    const boards = [
+      { id: 'board-1', type: 'arduino_uno', props: {} },
+      { id: 'board-2', type: 'arduino_uno', props: {} },
+    ];
+    const connected = { id: 'sensor', type: 'sensor', props: {} };
+    const renderedWith = new Map();
+    const definition = {
+      width: 10,
+      height: 10,
+      draw: (_ctx, inst, sim) => renderedWith.set(inst.id, sim),
+    };
+    let boardScans = 0;
+    window.ArduinoSim = sim1;
+    window.App = { sim2 };
+    window.ArduinoComponents = {
+      COMPONENT_DEFS: { arduino_uno: definition, sensor: definition },
+      getComponentClass: () => null,
+    };
+    const canvas = Object.create(CircuitCanvas.prototype);
+    canvas.components = [...boards, connected];
+    canvas.wires = [{ from: { instId: 'sensor', pinId: 'out' }, to: { instId: 'board-2', pinId: 'A0' } }];
+    canvas.zoom = 0.4;
+    canvas.mode = 'idle';
+    canvas.getAllBoardInsts = () => { boardScans++; return boards; };
+
+    try {
+      canvas._drawComponents(makeCtx());
+      expect(boardScans).toBe(1);
+      expect(renderedWith.get('board-1')).toBe(sim1);
+      expect(renderedWith.get('board-2')).toBe(sim2);
+      expect(renderedWith.get('sensor')).toBe(sim2);
+    } finally {
+      window.ArduinoSim = previousSim;
+      window.App = previousApp;
+      window.ArduinoComponents = previousComponents;
+    }
+  });
+
+  it('skips invisible minor grid strokes at low zoom', () => {
+    const countStrokes = (zoom) => {
+      let strokes = 0;
+      const ctx = new Proxy({}, {
+        get(_, prop) {
+          if (prop === 'stroke') return () => { strokes++; };
+          return () => {};
+        },
+        set: () => true,
+      });
+      const canvas = Object.create(CircuitCanvas.prototype);
+      canvas.GRID = 5;
+      canvas.zoom = zoom;
+      canvas.panX = 0;
+      canvas.panY = 0;
+      canvas._viewportWidth = 1000;
+      canvas._viewportHeight = 700;
+      canvas.canvas = { width: 1000, height: 700 };
+      canvas._drawGrid(ctx);
+      return strokes;
+    };
+
+    expect(countStrokes(0.4)).toBeLessThan(countStrokes(1));
+  });
+
+  it('computes DSO probe-scaled measurements without changing results', () => {
+    const samples = [-1, -0.5, 0.25, 1, -0.75, -0.25, 0.5, 1];
+    expect(dsoComputeMeasurements(samples, 0.007, 10))
+      .toEqual(dsoComputeMeasurements(samples.map(value => value * 10), 0.007));
   });
 });
 

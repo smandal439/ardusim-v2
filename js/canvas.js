@@ -264,20 +264,22 @@ class CircuitCanvas {
     const endX = startX + ((this._viewportWidth || this.canvas.width) * invZ) + G;
     const endY = startY + ((this._viewportHeight || this.canvas.height) * invZ) + G;
 
-    ctx.strokeStyle = this.zoom < 0.5 ? 'transparent' : 'rgba(255,255,255,0.04)';
-    ctx.lineWidth = 0.5 / this.zoom;
+    if (this.zoom >= 0.5) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+      ctx.lineWidth = 0.5 / this.zoom;
 
-    for (let x = startX; x <= endX; x += G) {
-      ctx.beginPath();
-      ctx.moveTo(x, startY);
-      ctx.lineTo(x, endY);
-      ctx.stroke();
-    }
-    for (let y = startY; y <= endY; y += G) {
-      ctx.beginPath();
-      ctx.moveTo(startX, y);
-      ctx.lineTo(endX, y);
-      ctx.stroke();
+      for (let x = startX; x <= endX; x += G) {
+        ctx.beginPath();
+        ctx.moveTo(x, startY);
+        ctx.lineTo(x, endY);
+        ctx.stroke();
+      }
+      for (let y = startY; y <= endY; y += G) {
+        ctx.beginPath();
+        ctx.moveTo(startX, y);
+        ctx.lineTo(endX, y);
+        ctx.stroke();
+      }
     }
 
     // Major grid
@@ -301,10 +303,10 @@ class CircuitCanvas {
   }
 
   _getSimForInst(inst) {
-    const boards = this.getAllBoardInsts();
     const sim1 = window.ArduinoSim;
     const sim2 = window.App && window.App.sim2;
     if (!sim2) return sim1;
+    const boards = this.getAllBoardInsts();
     if (boards.length < 2) return sim1;
     const boardTypes = ['arduino_uno', 'esp32_devkit_v1', 'arduino_nano', 'stm32f746_disco', 'lpc2148', 'pico2w', 'intel_8085', 'intel_8051', 'industrial_plc'];
     if (boardTypes.includes(inst.type)) {
@@ -326,13 +328,55 @@ class CircuitCanvas {
 
   _drawComponents(ctx) {
     const { COMPONENT_DEFS, getComponentClass } = window.ArduinoComponents;
-    const sim = window.ArduinoSim;
+    const sim1 = window.ArduinoSim;
+    const sim2 = window.App && window.App.sim2;
+    let simByComponentId = null;
+    if (sim2) {
+      const boards = this.getAllBoardInsts();
+      if (boards.length >= 2) {
+        simByComponentId = new Map();
+        const boardIndexById = new Map();
+        boards.forEach((board, index) => {
+          boardIndexById.set(board.id, index);
+          simByComponentId.set(board.id, index === 1 ? sim2 : sim1);
+        });
+        for (const wire of this.wires) {
+          if (!wire.from || !wire.to) continue;
+          const fromBoard = boardIndexById.get(wire.from.instId);
+          const toBoard = boardIndexById.get(wire.to.instId);
+          if (fromBoard !== undefined && toBoard === undefined && !simByComponentId.has(wire.to.instId)) {
+            simByComponentId.set(wire.to.instId, fromBoard === 1 ? sim2 : sim1);
+          }
+          if (toBoard !== undefined && fromBoard === undefined && !simByComponentId.has(wire.from.instId)) {
+            simByComponentId.set(wire.from.instId, toBoard === 1 ? sim2 : sim1);
+          }
+        }
+      }
+    }
+
+    let wiredPins;
+    if (this.zoom >= 0.5) {
+      wiredPins = new Map();
+      for (const wire of this.wires) {
+        for (const endpoint of [wire.from, wire.to]) {
+          if (!endpoint) continue;
+          let pins = wiredPins.get(endpoint.instId);
+          if (!pins) {
+            pins = new Set();
+            wiredPins.set(endpoint.instId, pins);
+          }
+          pins.add(endpoint.pinId);
+        }
+      }
+    }
 
     for (const inst of this.components) {
       const def = COMPONENT_DEFS[inst.type];
       if (!def) continue;
 
-      const instSim = this._getSimForInst(inst);
+      const instSim = simByComponentId
+        ? (simByComponentId.get(inst.id) || sim1)
+        : this._getSimForInst(inst);
 
       if (typeof def.step === 'function') {
         def.step(inst, instSim?.isRunning ? instSim : null);
@@ -357,7 +401,7 @@ class CircuitCanvas {
 
       // Draw pins
       if (this.zoom >= 0.5) {
-        this._drawPins(ctx, inst, def);
+        this._drawPins(ctx, inst, def, instSim, wiredPins);
       }
 
       ctx.restore();
@@ -377,18 +421,20 @@ class CircuitCanvas {
     }
   }
 
-  _drawPins(ctx, inst, def) {
-    const sim = this._getSimForInst(inst);
+  _drawPins(ctx, inst, def, instSim, wiredPins) {
+    const sim = instSim || this._getSimForInst(inst);
 
     for (const pin of def.pins) {
       const wx = inst.x + pin.x;
       const wy = inst.y + pin.y;
 
       // Check if wired
-      const isWired = this.wires.some(w =>
-        (w.from.instId === inst.id && w.from.pinId === pin.id) ||
-        (w.to.instId === inst.id && w.to.pinId === pin.id)
-      );
+      const isWired = wiredPins
+        ? Boolean(wiredPins.get(inst.id)?.has(pin.id))
+        : this.wires.some(w =>
+          (w.from.instId === inst.id && w.from.pinId === pin.id) ||
+          (w.to.instId === inst.id && w.to.pinId === pin.id)
+        );
 
       // Get pin state
       const pinKey = `pin_${this._pinToNumber(pin.id)}`;
