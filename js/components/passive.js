@@ -565,3 +565,68 @@ defComp({
     ctx.restore();
   }
 });
+
+function drawTransistor(ctx, inst, polarity) {
+  const { x, y } = inst;
+  const conducting = !!inst.runtimeState?.conducting;
+  const color = conducting ? '#44dd88' : '#aaa';
+  ctx.save();
+  ctx.translate(x, y);
+
+  ctx.strokeStyle = '#888';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(0, 25); ctx.lineTo(17, 25);
+  ctx.moveTo(23, 19); ctx.lineTo(40, 8); ctx.lineTo(48, 0);
+  ctx.moveTo(23, 31); ctx.lineTo(40, 42); ctx.lineTo(48, 50);
+  ctx.stroke();
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(24, 25, 16, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.strokeStyle = '#ddd';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(20, 17); ctx.lineTo(20, 33);
+  ctx.moveTo(17, 25); ctx.lineTo(20, 25);
+  ctx.stroke();
+
+  // The emitter arrow points out for NPN and into the base for PNP.
+  ctx.fillStyle = '#ddd';
+  ctx.beginPath();
+  if (polarity === 'npn') {
+    ctx.moveTo(37, 39); ctx.lineTo(43, 45); ctx.lineTo(35, 44);
+  } else {
+    ctx.moveTo(29, 33); ctx.lineTo(35, 34); ctx.lineTo(30, 39);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  if (inst.selected) drawSelectionRect(ctx, -3, -3, 54, 56);
+  ctx.restore();
+}
+
+for (const polarity of ['npn', 'pnp']) {
+  defComp({
+    id: `${polarity}_transistor`,
+    name: `${polarity.toUpperCase()} Transistor`,
+    category: 'Passive',
+    icon: polarity.toUpperCase(),
+    desc: `${polarity.toUpperCase()} bipolar junction transistor (BJT), with base, collector, and emitter terminals`,
+    search: `${polarity} bjt transistor`,
+    width: 48,
+    height: 50,
+    defaultProps: {},
+    pins: [
+      { id: 'base', label: 'B', type: PIN_TYPE.SIGNAL, x: 0, y: 25, side: 'left' },
+      { id: 'collector', label: 'C', type: PIN_TYPE.SIGNAL, x: 48, y: 0, side: 'top' },
+      { id: 'emitter', label: 'E', type: PIN_TYPE.SIGNAL, x: 48, y: 50, side: 'bottom' },
+    ],
+    draw(ctx, inst) {
+      drawTransistor(ctx, inst, polarity);
+    },
+  });
+}

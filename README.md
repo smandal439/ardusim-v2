@@ -153,7 +153,7 @@ A clean, compact toolbar keeps everything within reach without cluttering the wo
 - **Actuators**: Micro Servo Motor (SG90), Continuous Rotation Servo, DC Motor, Relay Module, Stepper Motor (28BYJ-48), L298N Motor Driver
 - **Audio**: MAX98357A I2S Amplifier, 4 Ohm Speaker
 - **Sensors**: DHT11 Temperature & Humidity, HC-SR04 Ultrasonic, LDR Light Sensor, PIR Motion, MPU6050 Accelerometer/Gyro, DS3231 RTC, IR Obstacle, Flex Sensor, Thermistor, LM35 Temperature, BME280 Weather, VL53L0X Proximity, MFRC522 RFID, IR Receiver, HC-05 Bluetooth, NEO-6M GPS
-- **Passives & Power**: Resistors (custom resistance), Capacitors, Diode (1N4007), Breadboard, 5V Power Supply, Ground (GND) Rail, MB102 Power Supply, Bench Power Supply
+- **Passives & Power**: Resistors (custom resistance), Capacitors, Diode (1N4007), NPN and PNP transistors (base-controlled collector/emitter switching), Breadboard, 5V Power Supply, Ground (GND) Rail, MB102 Power Supply, Bench Power Supply
 - **Digital ICs**: 555 Timer, 74HC00 (NAND), 74HC04 (NOT), 74HC08 (AND), 74HC32 (OR), 74HC74 (Dual DFF), 74HC47 (BCD→7Seg), 74HC148 (Encoder), 74HC595 (Shift Register), 74HC138 (Decoder), 74HC165 (PISO), 74HC193 (Counter), 74HC245 (Buffer), LM741 Op-Amp
 - **Instruments**: Multimeter, Function Generator, DSO 4-Channel Oscilloscope
 - **Probes**: Oscilloscope (2ch), DSO (4ch), Logic Analyzer (8ch)

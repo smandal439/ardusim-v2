@@ -289,7 +289,13 @@ class ElectricalEngine {
       adjacency.get(netB.id).push({ net: netA, resistance });
     };
 
+    const transistors = [];
     for (const inst of this.components) {
+      if (inst.type === 'npn_transistor' || inst.type === 'pnp_transistor') {
+        transistors.push(inst);
+        continue;
+      }
+
       // Only the bulb gets a real resistive edge here (its 12Ω filament is
       // physically meaningful). LEDs and diodes stay inert in solve(): a
       // single linear resistance cannot model their forward drop — a 20Ω
@@ -356,30 +362,52 @@ class ElectricalEngine {
 
     // 4. Gauss-Seidel iterative relaxation to solve KCL at each free node
     //    For each free node: V = Σ(V_neighbor / R_neighbor) / Σ(1 / R_neighbor)
-    for (let iter = 0; iter < 200; iter++) {
-      let maxDelta = 0;
-      for (const [netId, net] of this.nets) {
-        if (fixedNets.has(netId)) continue;
-        const neighbors = adjacency.get(netId);
-        if (!neighbors || neighbors.length === 0) continue;
+    const relaxVoltages = () => {
+      for (let iter = 0; iter < 200; iter++) {
+        let maxDelta = 0;
+        for (const [netId, net] of this.nets) {
+          if (fixedNets.has(netId)) continue;
+          const neighbors = adjacency.get(netId);
+          if (!neighbors || neighbors.length === 0) continue;
 
-        // KCL: sum of currents leaving this node = 0
-        // Σ (V_net - V_neighbor) / R_neighbor = 0
-        // V_net × Σ(1/R) = Σ(V_neighbor / R)
-        let sumG = 0;
-        let sumVG = 0;
-        for (const { net: neighbor, resistance } of neighbors) {
-          const g = 1 / resistance;
-          sumG += g;
-          sumVG += neighbor.voltage * g;
+          let sumG = 0;
+          let sumVG = 0;
+          for (const { net: neighbor, resistance } of neighbors) {
+            const g = 1 / resistance;
+            sumG += g;
+            sumVG += neighbor.voltage * g;
+          }
+          if (sumG > 0) {
+            const newV = sumVG / sumG;
+            maxDelta = Math.max(maxDelta, Math.abs(newV - net.voltage));
+            net.voltage = newV;
+          }
         }
-        if (sumG > 0) {
-          const newV = sumVG / sumG;
-          maxDelta = Math.max(maxDelta, Math.abs(newV - net.voltage));
-          net.voltage = newV;
-        }
+        if (maxDelta < 0.0001) break;
       }
-      if (maxDelta < 0.0001) break; // converged
+    };
+
+    relaxVoltages();
+
+    // Use the first-pass base/emitter voltages to model each BJT as a
+    // voltage-controlled collector/emitter switch.
+    for (const inst of transistors) {
+      const base = this.getNetForPin(inst.id, 'base');
+      const emitter = this.getNetForPin(inst.id, 'emitter');
+      const collector = this.getNetForPin(inst.id, 'collector');
+      const forwardBiased = inst.type === 'npn_transistor'
+        ? (base?.voltage ?? 0) - (emitter?.voltage ?? 0) >= 0.65
+        : (emitter?.voltage ?? 0) - (base?.voltage ?? 0) >= 0.65;
+
+      inst.runtimeState = inst.runtimeState || {};
+      inst.runtimeState.conducting = forwardBiased;
+      if (forwardBiased) {
+        addEdge(collector, emitter, 10);
+      }
+    }
+
+    if (transistors.some(inst => inst.runtimeState.conducting)) {
+      relaxVoltages();
     }
 
     // Store adjacency for getSourceAtPin/hasGroundAtPin traversal
@@ -834,6 +862,9 @@ class ElectricalEngine {
         const r = (Number(inst.props?.value) || 220)
           * (inst.props?.unit === 'kΩ' ? 1e3 : inst.props?.unit === 'MΩ' ? 1e6 : 1);
         addEdge(key('p1'), key('p2'), Math.max(r, 0.01));
+      } else if ((inst.type === 'npn_transistor' || inst.type === 'pnp_transistor')
+        && inst.runtimeState?.conducting) {
+        addEdge(key('collector'), key('emitter'), 10);
       } else if (inst.type === 'diode_1n4007') {
         addEdge(key('anode'), key('cathode'), 0.7);
       } else if (inst.type === 'bulb_12v') {
