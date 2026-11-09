@@ -61,11 +61,11 @@ function loadScripts(files, names) {
   return fn(global.window, global.document);
 }
 
-const { COMPONENT_DEFS, clampPropValue, _fgNum, _fgBool, _dsoProp, _dsoBool } = loadScripts([
+const { COMPONENT_DEFS, clampPropValue, _fgNum, _fgBool, _dsoProp, _dsoBool, _dsoAutoSet } = loadScripts([
   'js/components/base.js',
   'js/components/function_generator.js',
   'js/components/dso.js',
-], ['COMPONENT_DEFS', 'clampPropValue', '_fgNum', '_fgBool', '_dsoProp', '_dsoBool']);
+], ['COMPONENT_DEFS', 'clampPropValue', '_fgNum', '_fgBool', '_dsoProp', '_dsoBool', '_dsoAutoSet']);
 
 const { DSOFullscreen, _dsoFsProp, _dsoFsBool, _dsoFsSliderProgress, _dsoFsSliderValue } = loadScripts([
   'js/dso-fullscreen.js',
@@ -175,6 +175,60 @@ describe('fullscreen DSO control wiring', () => {
     // _dsoFsProp is what the render path's P() delegates to.
     expect(_dsoFsProp(inst.runtimeState, inst.props, 'timebase', 0.001)).toBe(0.01);
     expect(inst.props.timebase).toBe(0.01);
+  });
+
+  it('auto-set finds offset signals and clamps slow signals to the slowest timebase', () => {
+    const makeBuffer = (frequency, offset, duration, sampleRate) => {
+      const count = Math.floor(duration * sampleRate);
+      const t = Array.from({ length: count + 1 }, (_, i) => i / sampleRate);
+      return {
+        t,
+        ch1: t.map(time => offset + Math.sin(2 * Math.PI * frequency * time)),
+        ch2: [], ch3: [], ch4: [],
+      };
+    };
+
+    const fastInst = makeDsoInst();
+    fastInst._buffers = makeBuffer(100, 2.5, 0.02, 100000);
+    _dsoAutoSet(fastInst, fastInst.runtimeState, fastInst._buffers, _dsoProp);
+    expect(fastInst.runtimeState.timebase).toBe(0.005);
+
+    const slowInst = makeDsoInst();
+    slowInst._buffers = makeBuffer(1, 2.5, 2, 1000);
+    _dsoAutoSet(slowInst, slowInst.runtimeState, slowInst._buffers, _dsoProp);
+    expect(slowInst.runtimeState.timebase).toBe(0.1);
+  });
+
+  it('fullscreen Auto Set estimates timebase for offset signals', () => {
+    const fs = new DSOFullscreen();
+    const inst = makeDsoInst();
+    const sampleRate = 100000;
+    const count = 2000;
+    inst._buffers = {
+      t: Array.from({ length: count + 1 }, (_, i) => i / sampleRate),
+      ch1: Array.from({ length: count + 1 }, (_, i) => 2.5 + Math.sin(2 * Math.PI * 100 * i / sampleRate)),
+    };
+    fs.inst = inst;
+
+    fs._autoSet();
+
+    expect(inst.runtimeState.timebase).toBe(0.005);
+  });
+
+  it('main DSO applies Auto Set even while stopped', () => {
+    const inst = makeDsoInst();
+    const count = 2000;
+    inst._buffers = {
+      t: Array.from({ length: count + 1 }, (_, i) => i / 100000),
+      ch1: Array.from({ length: count + 1 }, (_, i) => 2.5 + Math.sin(2 * Math.PI * 100 * i / 100000)),
+      ch2: [], ch3: [], ch4: [],
+    };
+    inst.runtimeState = { runStop: 0, autoSet: 1 };
+
+    dsoDef.step(inst, { simTime: 1000, getPinVoltage: () => 0 });
+
+    expect(inst.runtimeState.timebase).toBe(0.005);
+    expect(inst.runtimeState.autoSet).toBe(0);
   });
 
   it('trigger level / mode / source / slope and math reach their properties', () => {
@@ -333,6 +387,11 @@ describe('DSO divisor props are bounded at read time', () => {
 });
 
 describe('DSO controls are scale-aware and normalize boolean values', () => {
+  it('shows small Time/Div values instead of rounding them to zero', () => {
+    expect(CircuitCanvas.prototype._formatSliderValue(0.001, { field: 'timebase' })).toBe('0.001');
+    expect(CircuitCanvas.prototype._formatSliderValue(0.00001, { field: 'timebase' })).toBe('0.00001');
+  });
+
   it('uses logarithmic scales for timebase and volts per division', () => {
     const controls = Object.fromEntries(dsoDef.interactive.map(ctrl => [ctrl.field, ctrl]));
     for (const field of ['timebase', 'ch1_vdiv', 'ch2_vdiv']) {

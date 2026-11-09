@@ -2013,10 +2013,16 @@ class DSOFullscreen {
     const trigCh = P('trig_source', 'ch1');
     const samples = buf && buf[trigCh] ? buf[trigCh] : null;
     if (samples && samples.length > 20) {
-      // Estimate frequency from zero crossings
+      // Estimate frequency from rising crossings at the signal's midpoint.
       const risingCrossings = [];
+      let vmin = Infinity, vmax = -Infinity;
+      for (let i = 0; i < samples.length; i++) {
+        if (samples[i] < vmin) vmin = samples[i];
+        if (samples[i] > vmax) vmax = samples[i];
+      }
+      const vCenter = (vmax + vmin) / 2;
       for (let i = 1; i < samples.length; i++) {
-        if (samples[i - 1] < 0 && samples[i] >= 0) risingCrossings.push(i);
+        if (samples[i - 1] <= vCenter && samples[i] > vCenter) risingCrossings.push(i);
       }
       const totalT = buf.t && buf.t.length > 1 ? buf.t[buf.t.length - 1] - buf.t[0] : 1;
       const sampleRate = totalT > 0 ? (samples.length - 1) / totalT : 0;
@@ -2028,10 +2034,7 @@ class DSOFullscreen {
         const period = 1 / freq;
         const targetTimebase = (period * 3) / 12; // 3 cycles across 12 divisions
         const timebaseSteps = [0.00001, 0.00002, 0.00005, 0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1];
-        let autoTimebase = timebaseSteps[0];
-        for (const s of timebaseSteps) {
-          if (s >= targetTimebase) { autoTimebase = s; break; }
-        }
+        const autoTimebase = timebaseSteps.find(s => s >= targetTimebase) || timebaseSteps[timebaseSteps.length - 1];
         rs.timebase = autoTimebase;
         props.timebase = autoTimebase;
       }

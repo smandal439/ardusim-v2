@@ -109,6 +109,13 @@ defComp({
       inst._triggered = false;
     }
 
+    const isAutoSet = _dsoBool(rs.autoSet !== undefined ? rs.autoSet : (inst.props.autoSet ?? 0));
+    if (isAutoSet) {
+      _dsoAutoSet(inst, rs, inst._buffers, P);
+      rs.autoSet = 0;
+      inst.props.autoSet = 0;
+    }
+
     const t = sim && typeof sim.simTime === 'number' ? sim.simTime / 1000 : performance.now() / 1000;
     inst._lastSimTime = t;
     const avSim = window.ArduinoSim;
@@ -315,13 +322,6 @@ defComp({
       inst._computeMeas[chId] = dsoComputeMeasurements(samples, capturedTime);
     });
 
-    // Auto-set: triggered when autoSet prop toggles to 1
-    const isAutoSet = _dsoBool(rs.autoSet !== undefined ? rs.autoSet : (inst.props.autoSet ?? 0));
-    if (isAutoSet) {
-      _dsoAutoSet(inst, rs, buf, P);
-      rs.autoSet = 0;
-      inst.props.autoSet = 0;
-    }
   },
 
   draw(ctx, inst, sim) {
@@ -1191,10 +1191,9 @@ function _dsoAutoSet(inst, rs, buf, P) {
     rs.trig_source = chId;
     inst.props.trig_source = chId;
 
-    const trigCh = chId;
     const risingCrossings = [];
     for (let i = 1; i < samples.length; i++) {
-      if (samples[i - 1] < 0 && samples[i] >= 0) risingCrossings.push(i);
+      if (samples[i - 1] <= vCenter && samples[i] > vCenter) risingCrossings.push(i);
     }
     const totalT = buf.t && buf.t.length > 1 ? buf.t[buf.t.length - 1] - buf.t[0] : 1;
     const sampleRate = totalT > 0 ? (samples.length - 1) / totalT : 0;
@@ -1206,8 +1205,7 @@ function _dsoAutoSet(inst, rs, buf, P) {
       const period = 1 / freq;
       const targetTimebase = (period * 3) / 12;
       const timebaseSteps = [0.00001, 0.00002, 0.00005, 0.0001, 0.0002, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1];
-      let autoTimebase = timebaseSteps[0];
-      for (const s of timebaseSteps) { if (s >= targetTimebase) { autoTimebase = s; break; } }
+      const autoTimebase = timebaseSteps.find(s => s >= targetTimebase) || timebaseSteps[timebaseSteps.length - 1];
       rs.timebase = autoTimebase;
       inst.props.timebase = autoTimebase;
     }

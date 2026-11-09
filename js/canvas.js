@@ -891,6 +891,7 @@ class CircuitCanvas {
 
   _formatSliderValue(value, ctrl) {
     const v = Number(value);
+    if (ctrl.field === 'timebase' && Number.isFinite(v)) return String(Number(v.toPrecision(3)));
     if (Number.isInteger(ctrl.step)) return String(Math.round(v));
     return String(Math.round(v * 10) / 10);
   }
