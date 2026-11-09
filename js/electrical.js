@@ -280,13 +280,22 @@ class ElectricalEngine {
 
     // 2. Build adjacency list from resistive elements (resistors, bulbs, diodes, etc.)
     //    Each edge connects two nets with a resistance value.
-    const adjacency = new Map(); // netId ← [{ net, resistance }]
-    const addEdge = (netA, netB, resistance) => {
+    const adjacency = new Map(); // netId ← [{ net, resistance, tag }]
+    const addEdge = (netA, netB, resistance, tag = null) => {
       if (!netA || !netB || netA === netB || resistance <= 0) return;
       if (!adjacency.has(netA.id)) adjacency.set(netA.id, []);
       if (!adjacency.has(netB.id)) adjacency.set(netB.id, []);
-      adjacency.get(netA.id).push({ net: netB, resistance });
-      adjacency.get(netB.id).push({ net: netA, resistance });
+      adjacency.get(netA.id).push({ net: netB, resistance, tag });
+      adjacency.get(netB.id).push({ net: netA, resistance, tag });
+    };
+
+    const removeEdgesByTag = (tag) => {
+      if (!tag) return;
+      for (const [, list] of adjacency) {
+        for (let i = list.length - 1; i >= 0; i--) {
+          if (list[i].tag === tag) list.splice(i, 1);
+        }
+      }
     };
 
     const transistors = [];
@@ -376,36 +385,190 @@ class ElectricalEngine {
 
     relaxVoltages();
 
-    // Use first-pass junction voltages to model diodes and BJTs as
-    // voltage-controlled switches.
-    for (const inst of diodes) {
-      const anode = this.getNetForPin(inst.id, 'anode');
-      const cathode = this.getNetForPin(inst.id, 'cathode');
-      const forwardBiased = (anode?.voltage ?? 0) - (cathode?.voltage ?? 0) >= 0.65;
-
-      inst.runtimeState = inst.runtimeState || {};
-      inst.runtimeState.conducting = forwardBiased;
-      if (forwardBiased) addEdge(anode, cathode, 10);
-    }
-
-    for (const inst of transistors) {
-      const base = this.getNetForPin(inst.id, 'base');
-      const emitter = this.getNetForPin(inst.id, 'emitter');
-      const collector = this.getNetForPin(inst.id, 'collector');
-      const forwardBiased = inst.type === 'npn_transistor'
-        ? (base?.voltage ?? 0) - (emitter?.voltage ?? 0) >= 0.65
-        : (emitter?.voltage ?? 0) - (base?.voltage ?? 0) >= 0.65;
-
-      inst.runtimeState = inst.runtimeState || {};
-      inst.runtimeState.conducting = forwardBiased;
-      if (forwardBiased) {
-        addEdge(collector, emitter, 10);
+    // Helper to evaluate external Thevenin equivalent (Voc, Rth) seen by a pin's net,
+    // excluding edges associated with specific internal component tags.
+    const getNetThevenin = (net, excludeTags = []) => {
+      if (!net) return { voc: 0, rth: Infinity };
+      if (net.sources && net.sources.length > 0) {
+        const v = [...net.sources].sort((a, b) => b.voltage - a.voltage)[0].voltage;
+        return { voc: v, rth: 0.05 };
       }
+      if (net.grounds && net.grounds.length > 0) {
+        return { voc: 0, rth: 0.05 };
+      }
+      const neighbors = adjacency.get(net.id) || [];
+      let sumG = 0;
+      let sumVG = 0;
+      for (const edge of neighbors) {
+        if (edge.tag && excludeTags.includes(edge.tag)) continue;
+        const g = 1 / Math.max(0.001, edge.resistance);
+        sumG += g;
+        sumVG += edge.net.voltage * g;
+      }
+      if (sumG <= 0) return { voc: 0, rth: Infinity };
+      return { voc: sumVG / sumG, rth: 1 / sumG };
+    };
+
+    const BJT_DEFAULT_MODELS = {
+      '2N2222': { beta: 160, vbe_on: 0.65, vce_sat: 0.20, early_voltage: 100, is_npn: true },
+      'BC547':  { beta: 250, vbe_on: 0.66, vce_sat: 0.15, early_voltage: 120, is_npn: true },
+      '2N3904': { beta: 100, vbe_on: 0.65, vce_sat: 0.20, early_voltage: 80,  is_npn: true },
+      'TIP31C': { beta: 40,  vbe_on: 0.70, vce_sat: 0.30, early_voltage: 60,  is_npn: true },
+      '2N2907': { beta: 160, vbe_on: 0.65, vce_sat: 0.20, early_voltage: 100, is_npn: false },
+      'BC557':  { beta: 250, vbe_on: 0.66, vce_sat: 0.15, early_voltage: 120, is_npn: false },
+      '2N3906': { beta: 100, vbe_on: 0.65, vce_sat: 0.20, early_voltage: 80,  is_npn: false },
+      'TIP32C': { beta: 40,  vbe_on: 0.70, vce_sat: 0.30, early_voltage: 60,  is_npn: false },
+    };
+
+    // Non-linear resolution loop for Diodes and BJTs (Cutoff, Active, Saturation regions)
+    const maxNonlinearPasses = (diodes.length > 0 || transistors.length > 0) ? 3 : 0;
+    for (let pass = 0; pass < maxNonlinearPasses; pass++) {
+      let anyChange = false;
+
+      // 4a. Diode Modeling (Forward-biased 0.65V drop)
+      for (const inst of diodes) {
+        const anode = this.getNetForPin(inst.id, 'anode');
+        const cathode = this.getNetForPin(inst.id, 'cathode');
+        const tag = 'diode_' + inst.id;
+        removeEdgesByTag(tag);
+
+        const vAnode = anode?.voltage ?? 0;
+        const vCathode = cathode?.voltage ?? 0;
+        const forwardBiased = (vAnode - vCathode) >= 0.65;
+
+        inst.runtimeState = inst.runtimeState || {};
+        if (inst.runtimeState.conducting !== forwardBiased) anyChange = true;
+        inst.runtimeState.conducting = forwardBiased;
+        if (forwardBiased) {
+          addEdge(anode, cathode, 10, tag);
+        }
+      }
+
+      // 4b. BJT Transistor Modeling (Cutoff, Active Region with Early Effect, Saturation Region)
+      for (const inst of transistors) {
+        const isNPN = inst.type === 'npn_transistor';
+        const base = this.getNetForPin(inst.id, 'base');
+        const emitter = this.getNetForPin(inst.id, 'emitter');
+        const collector = this.getNetForPin(inst.id, 'collector');
+
+        const tagB = 'trans_b_' + inst.id;
+        const tagC = 'trans_c_' + inst.id;
+        removeEdgesByTag(tagB);
+        removeEdgesByTag(tagC);
+
+        inst.runtimeState = inst.runtimeState || {};
+        const model = inst.props?.model || (isNPN ? '2N2222' : '2N3906');
+        const preset = (window.BJT_MODELS && window.BJT_MODELS[model])
+          || BJT_DEFAULT_MODELS[model] || {};
+        const beta = Math.max(1, Number(inst.props?.beta ?? preset.beta ?? (isNPN ? 160 : 100)));
+        const vbe_on = Math.max(0.1, Number(inst.props?.vbe_on ?? preset.vbe_on ?? 0.65));
+        const vce_sat = Math.max(0.01, Number(inst.props?.vce_sat ?? preset.vce_sat ?? 0.20));
+        const va = Math.max(10, Number(inst.props?.early_voltage ?? preset.early_voltage ?? 100));
+
+        const selfTags = [tagB, tagC];
+        const bTh = getNetThevenin(base, selfTags);
+        const cTh = getNetThevenin(collector, selfTags);
+        const vE = emitter?.voltage ?? 0;
+
+        let region = 'cutoff';
+        let ib = 0;
+        let ic = 0;
+        let rce = 1e7;
+        let rbe = 1e7;
+
+        if (isNPN) {
+          // --- NPN Transistor ---
+          const isForward = bTh.voc > vE + vbe_on;
+          if (isForward && base && emitter) {
+            ib = Math.max(0, (bTh.voc - (vE + vbe_on)) / (bTh.rth + 25));
+            rbe = Math.max(10, (vE + vbe_on) / Math.max(1e-8, ib));
+            addEdge(base, emitter, rbe, tagB);
+          }
+
+          if (ib > 1e-8 && cTh.voc > vE && collector && emitter) {
+            const vceEst = Math.max(0, cTh.voc - vE);
+            const icActive = beta * ib * (1 + vceEst / va);
+            const icSatMax = Math.max(0, (cTh.voc - (vE + vce_sat)) / Math.max(0.1, cTh.rth));
+
+            if (icActive >= icSatMax) {
+              // Saturation: VCE drops to VCE(sat), current is load limited
+              region = 'saturation';
+              ic = icSatMax;
+              rce = Math.max(8, vce_sat / Math.max(1e-5, ic));
+            } else {
+              // Active: IC = beta * IB * (1 + VCE / VA)
+              region = 'active';
+              ic = icActive;
+              const vceDrop = Math.max(vce_sat, cTh.voc - vE - ic * cTh.rth);
+              rce = Math.max(8, vceDrop / Math.max(1e-6, ic));
+            }
+            addEdge(collector, emitter, rce, tagC);
+          }
+        } else {
+          // --- PNP Transistor ---
+          const isForward = bTh.voc < vE - vbe_on;
+          if (isForward && base && emitter) {
+            ib = Math.max(0, ((vE - vbe_on) - bTh.voc) / (bTh.rth + 25));
+            rbe = Math.max(10, vbe_on / Math.max(1e-8, ib));
+            addEdge(emitter, base, rbe, tagB);
+          }
+
+          if (ib > 1e-8 && cTh.voc < vE && collector && emitter) {
+            const vecEst = Math.max(0, vE - cTh.voc);
+            const icActive = beta * ib * (1 + vecEst / va);
+            const icSatMax = Math.max(0, ((vE - vce_sat) - cTh.voc) / Math.max(0.1, cTh.rth));
+
+            if (icActive >= icSatMax) {
+              // Saturation: VEC drops to VEC(sat)
+              region = 'saturation';
+              ic = icSatMax;
+              rce = Math.max(8, vce_sat / Math.max(1e-5, ic));
+            } else {
+              // Active: IC = beta * IB * (1 + VEC / VA)
+              region = 'active';
+              ic = icActive;
+              const vecDrop = Math.max(vce_sat, vE - cTh.voc - ic * cTh.rth);
+              rce = Math.max(8, vecDrop / Math.max(1e-6, ic));
+            }
+            addEdge(emitter, collector, rce, tagC);
+          }
+        }
+
+        const conducting = region !== 'cutoff';
+        if (inst.runtimeState.conducting !== conducting || inst.runtimeState.region !== region) {
+          anyChange = true;
+        }
+
+        inst.runtimeState.conducting = conducting;
+        inst.runtimeState.region = region;
+        inst.runtimeState.ib = ib;
+        inst.runtimeState.ic = ic;
+        inst.runtimeState.ie = ib + ic;
+        inst.runtimeState.rce = rce;
+        inst.runtimeState.rbe = rbe;
+        inst.runtimeState.model = model;
+        inst.runtimeState.beta = beta;
+        inst.runtimeState.vbe_on = vbe_on;
+        inst.runtimeState.vce_sat = vce_sat;
+        inst.runtimeState.early_voltage = va;
+      }
+
+      relaxVoltages();
+      if (!anyChange && pass > 0) break;
     }
 
-    if (diodes.some(inst => inst.runtimeState.conducting)
-      || transistors.some(inst => inst.runtimeState.conducting)) {
-      relaxVoltages();
+    // Populate post-solve voltages and power dissipation for all transistors
+    for (const inst of transistors) {
+      const rs = inst.runtimeState || {};
+      const baseV = this.getNetForPin(inst.id, 'base')?.voltage ?? 0;
+      const emitterV = this.getNetForPin(inst.id, 'emitter')?.voltage ?? 0;
+      const collectorV = this.getNetForPin(inst.id, 'collector')?.voltage ?? 0;
+
+      rs.vbe = Math.abs(baseV - emitterV);
+      rs.vce = Math.abs(collectorV - emitterV);
+      rs.vcb = Math.abs(collectorV - baseV);
+      rs.beta_actual = (rs.ib && rs.ib > 1e-7) ? (rs.ic / rs.ib) : (rs.beta || 100);
+      rs.power = (rs.vce || 0) * (rs.ic || 0) + (rs.vbe || 0) * (rs.ib || 0);
     }
 
     // Store adjacency for getSourceAtPin/hasGroundAtPin traversal
@@ -862,7 +1025,8 @@ class ElectricalEngine {
         addEdge(key('p1'), key('p2'), Math.max(r, 0.01));
       } else if ((inst.type === 'npn_transistor' || inst.type === 'pnp_transistor')
         && inst.runtimeState?.conducting) {
-        addEdge(key('collector'), key('emitter'), 10);
+        addEdge(key('collector'), key('emitter'), Math.max(5, inst.runtimeState.rce || 10));
+        addEdge(key('base'), key('emitter'), Math.max(10, inst.runtimeState.rbe || 50));
       } else if (inst.type === 'diode_1n4007' && inst.runtimeState?.conducting) {
         addEdge(key('anode'), key('cathode'), 10);
       } else if (inst.type === 'bulb_12v') {

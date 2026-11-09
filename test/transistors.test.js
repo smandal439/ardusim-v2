@@ -181,4 +181,100 @@ describe('NPN and PNP transistors', () => {
     expect(engine.hasGroundAtPin('bulb', 'cathode')).toBe(false);
     expect(bulb.runtimeState.brightness).toBe(0);
   });
+
+  it('exhibits active region current amplification (Ic = beta * Ib)', () => {
+    const components = [
+      { id: 'vcc10', type: 'battery', props: { voltage: 10 }, runtimeState: { voltage: 10 } },
+      { id: 'vcc5', type: 'power_5v', props: {}, runtimeState: {} },
+      { id: 'gnd', type: 'power_gnd', props: {}, runtimeState: {} },
+      { id: 'rb', type: 'resistor', props: { value: 100, unit: 'kΩ' }, runtimeState: {} },
+      { id: 'rc', type: 'resistor', props: { value: 1, unit: 'kΩ' }, runtimeState: {} },
+      { id: 'npn', type: 'npn_transistor', props: { beta: 100, early_voltage: 100 }, runtimeState: {} },
+    ];
+    const wires = [
+      { from: { instId: 'vcc5', pinId: 'vcc' }, to: { instId: 'rb', pinId: 'p1' } },
+      { from: { instId: 'rb', pinId: 'p2' }, to: { instId: 'npn', pinId: 'base' } },
+      { from: { instId: 'vcc10', pinId: 'pos' }, to: { instId: 'rc', pinId: 'p1' } },
+      { from: { instId: 'rc', pinId: 'p2' }, to: { instId: 'npn', pinId: 'collector' } },
+      { from: { instId: 'npn', pinId: 'emitter' }, to: { instId: 'gnd', pinId: 'gnd' } },
+      { from: { instId: 'vcc10', pinId: 'neg' }, to: { instId: 'gnd', pinId: 'gnd' } },
+    ];
+    const engine = new window.ElectricalEngine();
+    engine.buildGraph(components, wires);
+    engine.solve();
+
+    const npn = components.find(c => c.id === 'npn');
+    expect(npn.runtimeState.region).toBe('active');
+    expect(npn.runtimeState.conducting).toBe(true);
+    expect(npn.runtimeState.ib).toBeGreaterThan(30e-6);
+    expect(npn.runtimeState.ib).toBeLessThan(60e-6);
+    expect(npn.runtimeState.ic).toBeGreaterThan(3e-3);
+    expect(npn.runtimeState.ic).toBeLessThan(6e-3);
+    expect(npn.runtimeState.vce).toBeGreaterThan(3);
+    expect(npn.runtimeState.vce).toBeLessThan(7);
+    expect(npn.runtimeState.beta_actual).toBeGreaterThan(80);
+  });
+
+  it('enters saturation region when base is overdriven', () => {
+    const components = [
+      { id: 'supply', type: 'power_5v', props: {}, runtimeState: {} },
+      { id: 'gnd', type: 'power_gnd', props: {}, runtimeState: {} },
+      { id: 'rb', type: 'resistor', props: { value: 1, unit: 'kΩ' }, runtimeState: {} },
+      { id: 'rc', type: 'resistor', props: { value: 1, unit: 'kΩ' }, runtimeState: {} },
+      { id: 'npn', type: 'npn_transistor', props: { beta: 100, vce_sat: 0.20 }, runtimeState: {} },
+    ];
+    const wires = [
+      { from: { instId: 'supply', pinId: 'vcc' }, to: { instId: 'rb', pinId: 'p1' } },
+      { from: { instId: 'rb', pinId: 'p2' }, to: { instId: 'npn', pinId: 'base' } },
+      { from: { instId: 'supply', pinId: 'vcc' }, to: { instId: 'rc', pinId: 'p1' } },
+      { from: { instId: 'rc', pinId: 'p2' }, to: { instId: 'npn', pinId: 'collector' } },
+      { from: { instId: 'npn', pinId: 'emitter' }, to: { instId: 'gnd', pinId: 'gnd' } },
+    ];
+    const engine = new window.ElectricalEngine();
+    engine.buildGraph(components, wires);
+    engine.solve();
+
+    const npn = components.find(c => c.id === 'npn');
+    expect(npn.runtimeState.region).toBe('saturation');
+    expect(npn.runtimeState.conducting).toBe(true);
+    expect(npn.runtimeState.vce).toBeLessThanOrEqual(0.35);
+    expect(npn.runtimeState.ic).toBeGreaterThan(4e-3); // ~ (5V - 0.2V) / 1k = 4.8 mA
+  });
+
+  it('clamps Vbe around forward knee voltage (approx 0.65V - 0.75V) and draws base current', () => {
+    const components = [
+      { id: 'supply', type: 'power_5v', props: {}, runtimeState: {} },
+      { id: 'gnd', type: 'power_gnd', props: {}, runtimeState: {} },
+      { id: 'rb', type: 'resistor', props: { value: 10, unit: 'kΩ' }, runtimeState: {} },
+      { id: 'npn', type: 'npn_transistor', props: { vbe_on: 0.65 }, runtimeState: {} },
+    ];
+    const wires = [
+      { from: { instId: 'supply', pinId: 'vcc' }, to: { instId: 'rb', pinId: 'p1' } },
+      { from: { instId: 'rb', pinId: 'p2' }, to: { instId: 'npn', pinId: 'base' } },
+      { from: { instId: 'npn', pinId: 'emitter' }, to: { instId: 'gnd', pinId: 'gnd' } },
+    ];
+    const engine = new window.ElectricalEngine();
+    engine.buildGraph(components, wires);
+    engine.solve();
+
+    const npn = components.find(c => c.id === 'npn');
+    expect(npn.runtimeState.vbe).toBeGreaterThan(0.60);
+    expect(npn.runtimeState.vbe).toBeLessThan(0.75);
+    expect(npn.runtimeState.ib).toBeGreaterThan(0.35e-3);
+    expect(npn.runtimeState.ib).toBeLessThan(0.50e-3);
+  });
+
+  it('supports model presets with differing gain and parameters', () => {
+    const defs = window.ArduinoComponents.COMPONENT_DEFS;
+    expect(defs.npn_transistor.defaultProps.model).toBe('2N2222');
+    expect(defs.npn_transistor.defaultProps.beta).toBe(160);
+    expect(defs.pnp_transistor.defaultProps.model).toBe('2N3906');
+    expect(defs.pnp_transistor.defaultProps.beta).toBe(100);
+
+    const bjtModels = window.BJT_MODELS;
+    expect(bjtModels['2N2222'].beta).toBe(160);
+    expect(bjtModels['BC547'].beta).toBe(250);
+    expect(bjtModels['2N3904'].beta).toBe(100);
+    expect(bjtModels['TIP31C'].beta).toBe(40);
+  });
 });

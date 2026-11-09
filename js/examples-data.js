@@ -33086,6 +33086,211 @@ window.EXAMPLE_SKETCHES = [
     "code": "/*\n * Traffic Light Simulator\n * Red=12, Yellow=11, Green=10\n */\n\nint redPin    = 12;\nint yellowPin = 11;\nint greenPin  = 10;\n\nvoid allOff() {\n  digitalWrite(redPin,    LOW);\n  digitalWrite(yellowPin, LOW);\n  digitalWrite(greenPin,  LOW);\n}\n\nvoid setup() {\n  pinMode(redPin,    OUTPUT);\n  pinMode(yellowPin, OUTPUT);\n  pinMode(greenPin,  OUTPUT);\n  Serial.begin(115200);\n  Serial.println(\"Traffic light started\");\n}\n\nvoid loop() {\n  // Red\n  allOff();\n  digitalWrite(redPin, HIGH);\n  Serial.println(\"RED - STOP\");\n  delay(3000);\n\n  // Red + Yellow (prepare to go)\n  digitalWrite(yellowPin, HIGH);\n  delay(1000);\n\n  // Green\n  allOff();\n  digitalWrite(greenPin, HIGH);\n  Serial.println(\"GREEN - GO\");\n  delay(3000);\n\n  // Yellow\n  allOff();\n  digitalWrite(yellowPin, HIGH);\n  Serial.println(\"YELLOW - SLOW DOWN\");\n  delay(1000);\n}"
   },
   {
+    "id": "transistor_characteristics_experiment",
+    "name": "BJT Transistor Characteristics Experiment",
+    "icon": "📈",
+    "desc": "Study NPN BJT Common Emitter input and output characteristics (Cutoff, Active, Saturation regions, Early effect, and current amplification) with multimeters.",
+    "tags": [
+      "transistor",
+      "bjt",
+      "characteristics",
+      "electronics",
+      "physics",
+      "lab"
+    ],
+    "code": "/*\n * BJT Transistor Characteristics Experiment\n * Common Emitter (CE) Configuration\n *\n * 1. OUTPUT CHARACTERISTICS (Ic vs Vce for different Ib):\n *    - Vary the base potentiometer to set base current Ib.\n *    - Observe collector current Ic and collector-emitter voltage Vce.\n *    - In the ACTIVE region: Ic = beta * Ib (linear current amplification).\n *    - In the SATURATION region: Vce drops to Vce(sat) (~0.2V).\n *    - In the CUTOFF region: Ib = 0 -> Ic = 0.\n *\n * 2. RIGHT-CLICK THE TRANSISTOR:\n *    - Select 'View Characteristics (IV Curves)' to open the interactive\n *      real-time IV curve tracer with dynamic Q-Point tracking!\n */\n\nvoid setup() {\n  Serial.begin(9600);\n  Serial.println(\"=== BJT Transistor Characteristics Experiment ===\");\n  Serial.println(\"Right-click the transistor to view live IV curves!\");\n}\n\nvoid loop() {\n  delay(1000);\n}\n",
+    "circuit": {
+      "components": [
+        {
+          "id": "q1",
+          "type": "npn_transistor",
+          "x": 420,
+          "y": 240,
+          "rotation": 0,
+          "props": {
+            "model": "2N2222",
+            "beta": 160,
+            "vbe_on": 0.65,
+            "vce_sat": 0.2,
+            "early_voltage": 100
+          }
+        },
+        {
+          "id": "pot1",
+          "type": "potentiometer",
+          "x": 160,
+          "y": 210,
+          "rotation": 0,
+          "props": {
+            "value": 512,
+            "resistance": 10000
+          }
+        },
+        {
+          "id": "rb",
+          "type": "resistor",
+          "x": 280,
+          "y": 260,
+          "rotation": 0,
+          "props": {
+            "value": 10,
+            "unit": "kΩ"
+          }
+        },
+        {
+          "id": "rc",
+          "type": "resistor",
+          "x": 420,
+          "y": 140,
+          "rotation": 90,
+          "props": {
+            "value": 1,
+            "unit": "kΩ"
+          }
+        },
+        {
+          "id": "vcc_base",
+          "type": "power_5v",
+          "x": 80,
+          "y": 180,
+          "rotation": 0,
+          "props": {}
+        },
+        {
+          "id": "vcc_coll",
+          "type": "battery",
+          "x": 540,
+          "y": 90,
+          "rotation": 0,
+          "props": {
+            "voltage": 9
+          }
+        },
+        {
+          "id": "gnd",
+          "type": "power_gnd",
+          "x": 340,
+          "y": 380,
+          "rotation": 0,
+          "props": {}
+        },
+        {
+          "id": "dmm_vce",
+          "type": "multimeter",
+          "x": 560,
+          "y": 220,
+          "rotation": 0,
+          "props": {
+            "mode": "V_DC",
+            "label": "V_CE Voltmeter"
+          }
+        }
+      ],
+      "wires": [
+        {
+          "from": {
+            "instId": "vcc_base",
+            "pinId": "vcc"
+          },
+          "to": {
+            "instId": "pot1",
+            "pinId": "p1"
+          }
+        },
+        {
+          "from": {
+            "instId": "pot1",
+            "pinId": "p3"
+          },
+          "to": {
+            "instId": "gnd",
+            "pinId": "gnd"
+          }
+        },
+        {
+          "from": {
+            "instId": "pot1",
+            "pinId": "p2"
+          },
+          "to": {
+            "instId": "rb",
+            "pinId": "p1"
+          }
+        },
+        {
+          "from": {
+            "instId": "rb",
+            "pinId": "p2"
+          },
+          "to": {
+            "instId": "q1",
+            "pinId": "base"
+          }
+        },
+        {
+          "from": {
+            "instId": "vcc_coll",
+            "pinId": "pos"
+          },
+          "to": {
+            "instId": "rc",
+            "pinId": "p1"
+          }
+        },
+        {
+          "from": {
+            "instId": "rc",
+            "pinId": "p2"
+          },
+          "to": {
+            "instId": "q1",
+            "pinId": "collector"
+          }
+        },
+        {
+          "from": {
+            "instId": "q1",
+            "pinId": "emitter"
+          },
+          "to": {
+            "instId": "gnd",
+            "pinId": "gnd"
+          }
+        },
+        {
+          "from": {
+            "instId": "vcc_coll",
+            "pinId": "neg"
+          },
+          "to": {
+            "instId": "gnd",
+            "pinId": "gnd"
+          }
+        },
+        {
+          "from": {
+            "instId": "dmm_vce",
+            "pinId": "probe_red"
+          },
+          "to": {
+            "instId": "q1",
+            "pinId": "collector"
+          }
+        },
+        {
+          "from": {
+            "instId": "dmm_vce",
+            "pinId": "probe_com"
+          },
+          "to": {
+            "instId": "q1",
+            "pinId": "emitter"
+          }
+        }
+      ]
+    }
+  },
+  {
     "id": "two_lcd",
     "name": "TWO LCD",
     "icon": "🔧",

@@ -3191,6 +3191,26 @@ class CircuitCanvas {
         }
       } else if ((inst.type === 'arduino_uno' || inst.type === 'arduino_nano') && /^[AD]\d+$/.test(pin.id)) {
         addRow('Arduino Pin', pinNum);
+      } else if (inst.type === 'npn_transistor' || inst.type === 'pnp_transistor') {
+        const rs = inst.runtimeState || {};
+        const reg = (rs.region || (rs.conducting ? 'active' : 'cutoff')).toUpperCase();
+        const regCls = reg === 'SATURATION' ? 'pin-tip-high' : (reg === 'ACTIVE' ? 'pin-tip-high' : 'pin-tip-low');
+        addRow('Operating Region', reg, regCls);
+        const engine = this.engine;
+        if (engine) {
+          const v = engine.getVoltageAtPin(inst.id, pin.id);
+          if (v != null) addRow('Pin Voltage', v.toFixed(3) + ' V');
+        }
+        if (pin.id === 'base') {
+          const ib = rs.ib || 0;
+          addRow('Base Current Ib', ib >= 1e-3 ? (ib * 1e3).toFixed(2) + ' mA' : (ib * 1e6).toFixed(1) + ' µA');
+        } else if (pin.id === 'collector') {
+          const ic = rs.ic || 0;
+          addRow('Collector Current Ic', ic >= 1 ? ic.toFixed(2) + ' A' : (ic * 1e3).toFixed(2) + ' mA');
+        } else if (pin.id === 'emitter') {
+          const ie = rs.ie || 0;
+          addRow('Emitter Current Ie', ie >= 1 ? ie.toFixed(2) + ' A' : (ie * 1e3).toFixed(2) + ' mA');
+        }
       }
       if (running) {
         const val = sim.pinStates ? (sim.pinStates[`pin_${pinNum}`] || 0) : 0;
@@ -5514,6 +5534,16 @@ class CircuitCanvas {
       const defs = window.ArduinoComponents?.COMPONENT_DEFS || {};
       let sum = 0;
       for (const comp of this.components) {
+        if (comp.type === 'npn_transistor' || comp.type === 'pnp_transistor') {
+          const rs = comp.runtimeState || {};
+          const cIn = group.has(`${comp.id}:collector`);
+          const bIn = group.has(`${comp.id}:base`);
+          const eIn = group.has(`${comp.id}:emitter`);
+          if (cIn && !bIn && !eIn) sum += (rs.ic || 0);
+          else if (bIn && !cIn && !eIn) sum += (rs.ib || 0);
+          else if (eIn && !cIn && !bIn) sum += (rs.ie || 0);
+          continue;
+        }
         const r = branchResistance(comp);
         if (r == null || r <= 0) continue;
         const pins = defs[comp.type]?.pins;

@@ -3789,7 +3789,10 @@ _newProject() {
         <span class="props-comp-icon">${this._escHtml(def ? def.icon : '🔧')}</span>
         <div>
           <p class="props-desc-text">${esc(g.longDesc || def?.desc || '')}</p>
-          <button type="button" class="gh-btn gh-btn-ghost gh-btn-sm props-ref-btn">Open full reference ←</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px;">
+            <button type="button" class="gh-btn gh-btn-ghost gh-btn-sm props-ref-btn">Open full reference ←</button>
+            ${(comp.type === 'npn_transistor' || comp.type === 'pnp_transistor') ? `<button type="button" class="gh-btn gh-btn-sm props-curves-btn" style="background:rgba(56,189,248,0.15);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);font-weight:600;">📈 View Characteristics (IV Curves)</button>` : ''}
+          </div>
         </div>
       </div>
       ${pinsPreview ? `<div class="props-pins"><span class="props-pins-label">Pins</span><div class="props-pins-list">${pinsPreview}</div></div>` : ''}
@@ -3858,6 +3861,23 @@ _newProject() {
           if (opt.value === String(value)) o.selected = true;
           select.appendChild(o);
         });
+        if (key === 'model') {
+          select.addEventListener('change', (e) => {
+            const m = e.target.value;
+            const models = window.BJT_MODELS || {};
+            const p = models[m];
+            if (p) {
+              const betaIn = body.querySelector('input[name="beta"]');
+              const vbeIn = body.querySelector('input[name="vbe_on"]');
+              const vceIn = body.querySelector('input[name="vce_sat"]');
+              const vaIn = body.querySelector('input[name="early_voltage"]');
+              if (betaIn) betaIn.value = p.beta;
+              if (vbeIn) vbeIn.value = p.vbe_on;
+              if (vceIn) vceIn.value = p.vce_sat;
+              if (vaIn) vaIn.value = p.early_voltage;
+            }
+          });
+        }
         row.appendChild(label);
         row.appendChild(select);
         rows.push(row);
@@ -3883,6 +3903,23 @@ _newProject() {
           opt.style.color = (c.hex === '#ffffff') ? '#000' : '#fff';
           select.appendChild(opt);
         });
+        if (key === 'model') {
+          select.addEventListener('change', (e) => {
+            const m = e.target.value;
+            const models = window.BJT_MODELS || {};
+            const p = models[m];
+            if (p) {
+              const betaIn = body.querySelector('input[name="beta"]');
+              const vbeIn = body.querySelector('input[name="vbe_on"]');
+              const vceIn = body.querySelector('input[name="vce_sat"]');
+              const vaIn = body.querySelector('input[name="early_voltage"]');
+              if (betaIn) betaIn.value = p.beta;
+              if (vbeIn) vbeIn.value = p.vbe_on;
+              if (vceIn) vceIn.value = p.vce_sat;
+              if (vaIn) vaIn.value = p.early_voltage;
+            }
+          });
+        }
         row.appendChild(label);
         row.appendChild(select);
         rows.push(row);
@@ -3928,6 +3965,14 @@ _newProject() {
       this._closeModal();
       window.GuideManager._selectedComp = comp.type;
       window.GuideManager?.open('components');
+    });
+
+    const curvesBtn = body.querySelector('.props-curves-btn');
+    if (curvesBtn) curvesBtn.addEventListener('click', () => {
+      this._closeModal();
+      if (window.TransistorCurvesModal) {
+        window.TransistorCurvesModal.open(comp);
+      }
     });
 
     document.querySelectorAll('.modal').forEach(m => m.classList.remove('active'));

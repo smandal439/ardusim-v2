@@ -566,13 +566,48 @@ defComp({
   }
 });
 
+const BJT_MODELS = {
+  '2N2222': { name: '2N2222', type: 'npn', beta: 160, vbe_on: 0.65, vce_sat: 0.20, early_voltage: 100, desc: 'General Purpose High-Speed NPN' },
+  'BC547':  { name: 'BC547',  type: 'npn', beta: 250, vbe_on: 0.66, vce_sat: 0.15, early_voltage: 120, desc: 'Low Noise Audio/General NPN' },
+  '2N3904': { name: '2N3904', type: 'npn', beta: 100, vbe_on: 0.65, vce_sat: 0.20, early_voltage: 80,  desc: 'General Purpose Switching NPN' },
+  'TIP31C': { name: 'TIP31C', type: 'npn', beta: 40,  vbe_on: 0.70, vce_sat: 0.30, early_voltage: 60,  desc: 'Medium Power NPN (100V, 3A)' },
+  '2N2907': { name: '2N2907', type: 'pnp', beta: 160, vbe_on: 0.65, vce_sat: 0.20, early_voltage: 100, desc: 'General Purpose High-Speed PNP' },
+  'BC557':  { name: 'BC557',  type: 'pnp', beta: 250, vbe_on: 0.66, vce_sat: 0.15, early_voltage: 120, desc: 'Low Noise Audio/General PNP' },
+  '2N3906': { name: '2N3906', type: 'pnp', beta: 100, vbe_on: 0.65, vce_sat: 0.20, early_voltage: 80,  desc: 'General Purpose Switching PNP' },
+  'TIP32C': { name: 'TIP32C', type: 'pnp', beta: 40,  vbe_on: 0.70, vce_sat: 0.30, early_voltage: 60,  desc: 'Medium Power PNP (100V, 3A)' },
+};
+if (typeof window !== 'undefined') window.BJT_MODELS = BJT_MODELS;
+
 function drawTransistor(ctx, inst, polarity) {
   const { x, y } = inst;
-  const conducting = !!inst.runtimeState?.conducting;
-  const color = conducting ? '#44dd88' : '#aaa';
+  const rs = inst.runtimeState || {};
+  const region = rs.region || (rs.conducting ? 'active' : 'cutoff');
+
+  let strokeColor = '#64748b';
+  let glowColor = null;
+  let badgeText = 'OFF';
+  if (region === 'saturation') {
+    strokeColor = '#22c55e';
+    glowColor = 'rgba(34, 197, 94, 0.2)';
+    badgeText = 'SAT';
+  } else if (region === 'active') {
+    strokeColor = '#38bdf8';
+    glowColor = 'rgba(56, 189, 248, 0.2)';
+    badgeText = 'ACT';
+  }
+
   ctx.save();
   ctx.translate(x, y);
 
+  // Background operating glow
+  if (glowColor) {
+    ctx.fillStyle = glowColor;
+    ctx.beginPath();
+    ctx.arc(24, 25, 18, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Terminal leads
   ctx.strokeStyle = '#888';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
@@ -581,13 +616,15 @@ function drawTransistor(ctx, inst, polarity) {
   ctx.moveTo(23, 31); ctx.lineTo(40, 42); ctx.lineTo(48, 50);
   ctx.stroke();
 
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.5;
+  // Transistor can/circle
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth = 1.8;
   ctx.beginPath();
   ctx.arc(24, 25, 16, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.strokeStyle = '#ddd';
+  // Base bar
+  ctx.strokeStyle = '#e2e8f0';
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(20, 17); ctx.lineTo(20, 33);
@@ -595,7 +632,7 @@ function drawTransistor(ctx, inst, polarity) {
   ctx.stroke();
 
   // The emitter arrow points out for NPN and into the base for PNP.
-  ctx.fillStyle = '#ddd';
+  ctx.fillStyle = '#e2e8f0';
   ctx.beginPath();
   if (polarity === 'npn') {
     ctx.moveTo(37, 39); ctx.lineTo(43, 45); ctx.lineTo(35, 44);
@@ -605,21 +642,82 @@ function drawTransistor(ctx, inst, polarity) {
   ctx.closePath();
   ctx.fill();
 
-  if (inst.selected) drawSelectionRect(ctx, -3, -3, 54, 56);
+  // Terminal Pin labels
+  ctx.font = '8px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillStyle = '#94a3b8';
+  ctx.textAlign = 'left';
+  ctx.fillText('B', 4, 21);
+  ctx.fillText('C', 38, 7);
+  ctx.fillText('E', 38, 49);
+
+  // Model & State labels
+  const modelName = inst.props?.model || (polarity === 'npn' ? '2N2222' : '2N3906');
+  ctx.font = 'bold 8.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillStyle = '#cbd5e1';
+  ctx.fillText(modelName, 0, 61);
+  ctx.fillStyle = strokeColor;
+  ctx.fillText('[' + badgeText + ']', 34, 61);
+
+  if (inst.selected) drawSelectionRect(ctx, -3, -3, 56, 68);
   ctx.restore();
 }
 
 for (const polarity of ['npn', 'pnp']) {
+  const isNPN = polarity === 'npn';
+  const defaultModel = isNPN ? '2N2222' : '2N3906';
+  const preset = BJT_MODELS[defaultModel];
+
   defComp({
     id: `${polarity}_transistor`,
     name: `${polarity.toUpperCase()} Transistor`,
     category: 'Passive',
     icon: polarity.toUpperCase(),
-    desc: `${polarity.toUpperCase()} bipolar junction transistor (BJT), with base, collector, and emitter terminals`,
-    search: `${polarity} bjt transistor`,
+    desc: `${polarity.toUpperCase()} bipolar junction transistor (BJT) with cutoff, active, and saturation characteristics`,
+    search: `${polarity} bjt transistor 2n2222 bc547 2n3904 2n3906 tip31c`,
     width: 48,
     height: 50,
-    defaultProps: {},
+    defaultProps: {
+      model: defaultModel,
+      beta: preset.beta,
+      vbe_on: preset.vbe_on,
+      vce_sat: preset.vce_sat,
+      early_voltage: preset.early_voltage,
+    },
+    interactive: [
+      {
+        field: 'model', label: 'BJT Model Preset', type: 'select',
+        options: isNPN ? [
+          { value: '2N2222', label: '2N2222 (General Purpose, β=160)' },
+          { value: 'BC547',  label: 'BC547 (Low Noise Audio, β=250)' },
+          { value: '2N3904', label: '2N3904 (Switching NPN, β=100)' },
+          { value: 'TIP31C', label: 'TIP31C (Power NPN, 3A, β=40)' },
+          { value: 'custom', label: 'Custom BJT Parameters' },
+        ] : [
+          { value: '2N3906', label: '2N3906 (General Purpose, β=100)' },
+          { value: '2N2907', label: '2N2907 (Switching PNP, β=160)' },
+          { value: 'BC557',  label: 'BC557 (Audio / Low Noise, β=250)' },
+          { value: 'TIP32C', label: 'TIP32C (Power PNP, 3A, β=40)' },
+          { value: 'custom', label: 'Custom BJT Parameters' },
+        ],
+      },
+      { field: 'beta', label: 'Current Gain (β / hFE)', type: 'number', min: 10, max: 1000, step: 5 },
+      { field: 'vbe_on', label: 'Base-Emitter Drop Vbe(on) [V]', type: 'number', min: 0.2, max: 1.5, step: 0.01 },
+      { field: 'vce_sat', label: 'Saturation Voltage Vce(sat) [V]', type: 'number', min: 0.05, max: 1.0, step: 0.01 },
+      { field: 'early_voltage', label: 'Early Voltage VA [V]', type: 'number', min: 20, max: 500, step: 5 },
+    ],
+    contextMenu: [
+      {
+        label: 'View Characteristics (IV Curves)',
+        icon: '📈',
+        action: (inst) => {
+          if (window.TransistorCurvesModal) {
+            window.TransistorCurvesModal.open(inst);
+          } else if (window.App?.openTransistorCurves) {
+            window.App.openTransistorCurves(inst);
+          }
+        },
+      },
+    ],
     pins: [
       { id: 'base', label: 'B', type: PIN_TYPE.SIGNAL, x: 0, y: 25, side: 'left' },
       { id: 'collector', label: 'C', type: PIN_TYPE.SIGNAL, x: 48, y: 0, side: 'top' },
