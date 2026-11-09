@@ -196,6 +196,19 @@ class ElectricalEngine {
         }
         break;
       }
+      case 'potentiometer': {
+        // Alias alternative pin IDs to standard pins so any wire nomenclature connects
+        conns.push([key('p1'), key('vcc')]);
+        conns.push([key('cw'), key('vcc')]);
+        conns.push([key('t1'), key('vcc')]);
+        conns.push([key('p2'), key('wiper')]);
+        conns.push([key('out'), key('wiper')]);
+        conns.push([key('w'), key('wiper')]);
+        conns.push([key('p3'), key('gnd')]);
+        conns.push([key('ccw'), key('gnd')]);
+        conns.push([key('t2'), key('gnd')]);
+        break;
+      }
       case 'multimeter': {
         // In current mode, the multimeter is a short circuit (0Ω) — probes are
         // connected. props is the source of truth (runtimeState.mode mirrors it
@@ -307,6 +320,42 @@ class ElectricalEngine {
       }
       if (inst.type === 'diode_1n4007') {
         diodes.push(inst);
+        continue;
+      }
+
+      if (inst.type === 'potentiometer') {
+        const getNet = (...pins) => {
+          for (const p of pins) {
+            const net = this.getNetForPin(inst.id, p);
+            if (net) return net;
+          }
+          return null;
+        };
+
+        const net1 = getNet('vcc', 'p1', 'cw', 't1');
+        const netW = getNet('wiper', 'p2', 'out', 'w');
+        const net2 = getNet('gnd', 'p3', 'ccw', 't2');
+
+        const rawRes = Number(inst.props?.resistance ?? inst.props?.value_res ?? 10000);
+        const unitMult = inst.props?.unit === 'MΩ' ? 1e6 : (inst.props?.unit === 'kΩ' ? 1e3 : 1);
+        const rTotal = Math.max(1, rawRes * (inst.props?.unit ? unitMult : (rawRes < 100 ? 1e3 : 1)));
+
+        const maxVal = Math.max(1, Number(inst.props?.maxValue) || 1023);
+        const rawVal = Number(inst.runtimeState?.value ?? inst.props?.value ?? 512);
+        const ratio = Math.max(0, Math.min(1, rawVal / maxVal));
+
+        const r1W = Math.max(0.01, (1 - ratio) * rTotal);
+        const rW2 = Math.max(0.01, ratio * rTotal);
+
+        if (net1 && netW) addEdge(net1, netW, r1W);
+        if (netW && net2) addEdge(netW, net2, rW2);
+        if (net1 && net2 && !netW) addEdge(net1, net2, rTotal);
+
+        inst.runtimeState = inst.runtimeState || {};
+        inst.runtimeState.r_total = rTotal;
+        inst.runtimeState.r_1w = r1W;
+        inst.runtimeState.r_w2 = rW2;
+        inst.runtimeState.ratio = ratio;
         continue;
       }
 
@@ -705,10 +754,10 @@ class ElectricalEngine {
             const pinNum = this._canvas?._pinToNumber?.(pinId);
             if (pinNum != null) {
               const pinMode = sim?.pinModes?.[`pin_${pinNum}`];
-              // ESP32 GPIO34-39 are input-only: they can never drive the
-              // graph, so treat them as passive regardless of pinMode —
-              // otherwise an unconfigured ADC pin is grounded and reads 0 V.
-              const inputOnly = inst.type === 'esp32_devkit_v1' && pinNum >= 34 && pinNum <= 39;
+              // ESP32 GPIO34-39 are input-only, and analog pins (A0-A7 / ADC) default to
+              // high-impedance inputs: they never drive the graph unless explicitly set to OUTPUT.
+              const isAnalog = /^A\d+$/.test(pinId) || pinId.startsWith('ADC');
+              const inputOnly = (inst.type === 'esp32_devkit_v1' && pinNum >= 34 && pinNum <= 39) || isAnalog;
               if (inputOnly || pinMode === 'INPUT' || pinMode === 'INPUT_PULLUP' || pinMode === 'INPUT_PULLDOWN') {
                 // Input pins are passive readers — don't drive the electrical graph.
                 // Their solved voltages are fed back to pinStates in updateSimState.
@@ -1023,6 +1072,29 @@ class ElectricalEngine {
         const r = (Number(inst.props?.value) || 220)
           * (inst.props?.unit === 'kΩ' ? 1e3 : inst.props?.unit === 'MΩ' ? 1e6 : 1);
         addEdge(key('p1'), key('p2'), Math.max(r, 0.01));
+      } else if (inst.type === 'potentiometer') {
+        const rawRes = Number(inst.props?.resistance ?? inst.props?.value_res ?? 10000);
+        const unitMult = inst.props?.unit === 'MΩ' ? 1e6 : (inst.props?.unit === 'kΩ' ? 1e3 : 1);
+        const rTotal = Math.max(1, rawRes * (inst.props?.unit ? unitMult : (rawRes < 100 ? 1e3 : 1)));
+        const maxVal = Math.max(1, Number(inst.props?.maxValue) || 1023);
+        const rawVal = Number(inst.runtimeState?.value ?? inst.props?.value ?? 512);
+        const ratio = Math.max(0, Math.min(1, rawVal / maxVal));
+
+        const r1W = Math.max(0.01, (1 - ratio) * rTotal);
+        const rW2 = Math.max(0.01, ratio * rTotal);
+
+        addEdge(key('p1'), key('vcc'), 0);
+        addEdge(key('cw'), key('vcc'), 0);
+        addEdge(key('t1'), key('vcc'), 0);
+        addEdge(key('p2'), key('wiper'), 0);
+        addEdge(key('out'), key('wiper'), 0);
+        addEdge(key('w'), key('wiper'), 0);
+        addEdge(key('p3'), key('gnd'), 0);
+        addEdge(key('ccw'), key('gnd'), 0);
+        addEdge(key('t2'), key('gnd'), 0);
+
+        addEdge(key('vcc'), key('wiper'), r1W);
+        addEdge(key('wiper'), key('gnd'), rW2);
       } else if ((inst.type === 'npn_transistor' || inst.type === 'pnp_transistor')
         && inst.runtimeState?.conducting) {
         addEdge(key('collector'), key('emitter'), Math.max(5, inst.runtimeState.rce || 10));

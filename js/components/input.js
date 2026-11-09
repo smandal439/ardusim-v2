@@ -135,98 +135,47 @@ defComp({
     ctx.restore();
   }
 });
-/* ─── POTENTIOMETER ─── */
+/* ─── POTENTIOMETER (VARIABLE RESISTOR) ─── */
+function getPotTotalResistance(inst) {
+  const props = inst.props || {};
+  let val = Number(props.resistance !== undefined ? props.resistance : (props.value_res || 10000));
+  if (props.unit === 'kΩ') val *= 1e3;
+  else if (props.unit === 'MΩ') val *= 1e6;
+  else if (!props.unit && val < 500) val *= 1e3;
+  return Math.max(1, val);
+}
+
+function formatPotResistance(r) {
+  if (r >= 1e6) return (r / 1e6).toFixed(1) + 'MΩ';
+  if (r >= 1e3) return (r / 1e3).toFixed(1) + 'kΩ';
+  return Math.round(r) + 'Ω';
+}
+
 defComp({
   id: 'potentiometer',
   name: 'Potentiometer',
   category: 'Input',
   icon: '🎚️',
-  desc: '10k-ohm variable resistor with wiper output (0-1023)',
+  desc: 'Precision variable resistor / potentiometer with adjustable wiper position and real-world resistance',
   width: 50,
   height: 60,
-  defaultProps: { value: 512, maxValue: 1023, resistance: 10000 },
+  defaultProps: { value: 512, maxValue: 1023, resistance: 10, unit: 'kΩ' },
   interactive: [
-    { field: 'value', label: 'Wiper', min: 0, max: 1023, step: 1 },
+    { field: 'value', label: 'Wiper Position', min: 0, max: 1023, step: 1 },
+    { field: 'resistance', label: 'Total Track Resistance', min: 1, max: 1000000, step: 1 },
+    { field: 'unit', label: 'Resistance Unit', type: 'select', options: [
+      { value: 'Ω', label: 'Ω (Ohms)' },
+      { value: 'kΩ', label: 'kΩ (kilo-Ohms)' },
+      { value: 'MΩ', label: 'MΩ (Mega-Ohms)' },
+    ]},
   ],
   pins: [
-    { id: 'vcc', label: 'VCC', type: PIN_TYPE.POWER, x: 8, y: 60, side: 'bottom' },
-    { id: 'wiper', label: 'OUT', type: PIN_TYPE.ANALOG, x: 25, y: 60, side: 'bottom' },
-    { id: 'gnd', label: 'GND', type: PIN_TYPE.GND, x: 42, y: 60, side: 'bottom' },
+    { id: 'vcc', label: '1', type: PIN_TYPE.PASSIVE, x: 8, y: 60, side: 'bottom' },
+    { id: 'wiper', label: 'W', type: PIN_TYPE.PASSIVE, x: 25, y: 60, side: 'bottom' },
+    { id: 'gnd', label: '2', type: PIN_TYPE.PASSIVE, x: 42, y: 60, side: 'bottom' },
   ],
   draw(ctx, inst, sim) {
-    const { x, y } = inst;
-    const val = (inst.runtimeState && inst.runtimeState.value !== undefined) ? inst.runtimeState.value : (inst.props.value || 512);
-    const pct = val / (inst.props.maxValue || 1023);
-    const angle = -2.2 + pct * 4.4; // from -2.2 to +2.2 rad
-
-    ctx.save();
-    ctx.translate(x, y);
-
-    // Leads
-    ctx.strokeStyle = '#888';
-    ctx.lineWidth = 1.5;
-    [[8, 60], [25, 60], [42, 60]].forEach(([px, py]) => {
-      ctx.beginPath();
-      ctx.moveTo(px, py);
-      ctx.lineTo(px, 46);
-      ctx.stroke();
-    });
-
-    // Body
-    ctx.fillStyle = '#2a2a2a';
-    roundRect(ctx, 2, 5, 46, 42, 5);
-    ctx.fill();
-    ctx.strokeStyle = '#555';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // Dial ring
-    ctx.strokeStyle = '#888';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(25, 26, 16, -Math.PI * 0.8 + Math.PI * 0.5, Math.PI * 0.8 + Math.PI * 0.5);
-    ctx.stroke();
-
-    // Dial fill (colored arc showing value)
-    ctx.strokeStyle = '#00979c';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    const startA = -Math.PI * 0.8 + Math.PI * 0.5;
-    ctx.arc(25, 26, 16, startA, startA + pct * Math.PI * 1.6);
-    ctx.stroke();
-
-    // Knob
-    ctx.fillStyle = '#444';
-    ctx.beginPath();
-    ctx.arc(25, 26, 10, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#666';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // Indicator line
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(25, 26);
-    ctx.lineTo(25 + Math.sin(angle) * 8, 26 - Math.cos(angle) * 8);
-    ctx.stroke();
-
-    // Value display
-    ctx.fillStyle = '#aaa';
-    ctx.font = 'bold 7px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(val, 25, 10);
-
-    // Pin labels
-    ctx.fillStyle = '#888';
-    ctx.font = '6px sans-serif';
-    ctx.fillText('V', 8, 56);
-    ctx.fillText('W', 25, 56);
-    ctx.fillText('G', 42, 56);
-
-    if (inst.selected) drawSelectionRect(ctx, -3, 2, 56, 65);
-    ctx.restore();
+    drawPotentiometer(ctx, inst, sim);
   }
 });
 
@@ -236,25 +185,43 @@ defComp({
 class PotentiometerComponent extends Component {
   getPins() {
     return [
-      { id: 'vcc', label: 'VCC', type: PIN_TYPE.POWER, x: 8, y: 60, side: 'bottom' },
-      { id: 'wiper', label: 'OUT', type: PIN_TYPE.ANALOG, x: 25, y: 60, side: 'bottom' },
-      { id: 'gnd', label: 'GND', type: PIN_TYPE.GND, x: 42, y: 60, side: 'bottom' },
+      { id: 'vcc', label: '1', type: PIN_TYPE.PASSIVE, x: 8, y: 60, side: 'bottom' },
+      { id: 'wiper', label: 'W', type: PIN_TYPE.PASSIVE, x: 25, y: 60, side: 'bottom' },
+      { id: 'gnd', label: '2', type: PIN_TYPE.PASSIVE, x: 42, y: 60, side: 'bottom' },
     ];
   }
 
   update(canvas) {
-    const source = this.getSource('vcc');
-    const hasGnd = this.hasGround('gnd');
+    const val = this.runtimeState.value !== undefined ? this.runtimeState.value : (this.props.value || 512);
+    const maxVal = this.props.maxValue || 1023;
+    const ratio = Math.max(0, Math.min(1, val / maxVal));
 
-    if (source && hasGnd) {
-      const val = this.runtimeState.value !== undefined ? this.runtimeState.value : (this.props.value || 512);
-      const maxVal = this.props.maxValue || 1023;
-      const ratio = Math.max(0, Math.min(1, val / maxVal));
-      const outVoltage = source.voltage * ratio;
-      const adcVal = Math.round((outVoltage / 5.0) * 1023);
-      this.runtimeState.wiper = adcVal;
-      this.writePin('wiper', adcVal);
+    const rTotal = getPotTotalResistance(this.inst);
+    const r1W = Math.max(0.01, (1 - ratio) * rTotal);
+    const rW2 = Math.max(0.01, ratio * rTotal);
+
+    this.runtimeState.r_total = rTotal;
+    this.runtimeState.r_1w = r1W;
+    this.runtimeState.r_w2 = rW2;
+    this.runtimeState.ratio = ratio;
+
+    const engine = canvas?.engine;
+    if (engine) {
+      const vWiper = engine.getVoltageAtPin(this.inst.id, 'wiper');
+      if (vWiper != null) {
+        this.runtimeState.voltage = vWiper;
+        const adcVal = Math.round((vWiper / 5.0) * 1023);
+        this.runtimeState.wiper = adcVal;
+        this.writePin('wiper', adcVal);
+        return;
+      }
     }
+
+    const source = this.getSource('vcc');
+    const outVoltage = source ? source.voltage * ratio : 5.0 * ratio;
+    const adcVal = Math.round((outVoltage / 5.0) * 1023);
+    this.runtimeState.wiper = adcVal;
+    this.writePin('wiper', adcVal);
   }
 
   render(ctx, sim) {
@@ -266,12 +233,24 @@ class PotentiometerComponent extends Component {
 function drawPotentiometer(ctx, inst, sim) {
   const { x, y } = inst;
   const val = (inst.runtimeState && inst.runtimeState.value !== undefined) ? inst.runtimeState.value : (inst.props.value || 512);
-  const pct = val / (inst.props.maxValue || 1023);
-  const angle = -2.2 + pct * 4.4;
+  const maxVal = inst.props.maxValue || 1023;
+  const pct = Math.max(0, Math.min(1, val / maxVal));
+  const angle = -2.2 + pct * 4.4; // from -2.2 to +2.2 rad
+
+  const rTotal = getPotTotalResistance(inst);
+  const rW2 = pct * rTotal;
+  const r1W = (1 - pct) * rTotal;
+
+  inst.runtimeState = inst.runtimeState || {};
+  inst.runtimeState.r_total = rTotal;
+  inst.runtimeState.r_1w = r1W;
+  inst.runtimeState.r_w2 = rW2;
+  inst.runtimeState.ratio = pct;
 
   ctx.save();
   ctx.translate(x, y);
 
+  // Leads
   ctx.strokeStyle = '#888';
   ctx.lineWidth = 1.5;
   [[8, 60], [25, 60], [42, 60]].forEach(([px, py]) => {
@@ -281,6 +260,7 @@ function drawPotentiometer(ctx, inst, sim) {
     ctx.stroke();
   });
 
+  // Body
   ctx.fillStyle = '#2a2a2a';
   roundRect(ctx, 2, 5, 46, 42, 5);
   ctx.fill();
@@ -288,12 +268,14 @@ function drawPotentiometer(ctx, inst, sim) {
   ctx.lineWidth = 1;
   ctx.stroke();
 
+  // Dial ring
   ctx.strokeStyle = '#888';
   ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.arc(25, 26, 16, -Math.PI * 0.8 + Math.PI * 0.5, Math.PI * 0.8 + Math.PI * 0.5);
   ctx.stroke();
 
+  // Dial fill (colored arc showing value)
   ctx.strokeStyle = '#00979c';
   ctx.lineWidth = 3;
   ctx.beginPath();
@@ -301,6 +283,7 @@ function drawPotentiometer(ctx, inst, sim) {
   ctx.arc(25, 26, 16, startA, startA + pct * Math.PI * 1.6);
   ctx.stroke();
 
+  // Knob
   ctx.fillStyle = '#444';
   ctx.beginPath();
   ctx.arc(25, 26, 10, 0, Math.PI * 2);
@@ -309,6 +292,7 @@ function drawPotentiometer(ctx, inst, sim) {
   ctx.lineWidth = 1;
   ctx.stroke();
 
+  // Indicator line
   ctx.strokeStyle = '#fff';
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -316,16 +300,23 @@ function drawPotentiometer(ctx, inst, sim) {
   ctx.lineTo(25 + Math.sin(angle) * 8, 26 - Math.cos(angle) * 8);
   ctx.stroke();
 
-  ctx.fillStyle = '#aaa';
-  ctx.font = 'bold 7px monospace';
+  // Value display: Show live variable resistance e.g. "5.0kΩ"
+  ctx.fillStyle = '#38bdf8';
+  ctx.font = 'bold 7.5px -apple-system, BlinkMacSystemFont, "Segoe UI", monospace';
   ctx.textAlign = 'center';
-  ctx.fillText(val, 25, 10);
+  ctx.fillText(formatPotResistance(rW2), 25, 11);
 
-  ctx.fillStyle = '#888';
+  // Total track rating below knob e.g. "10kΩ"
+  ctx.fillStyle = '#94a3b8';
   ctx.font = '6px sans-serif';
-  ctx.fillText('V', 8, 56);
+  ctx.fillText(formatPotResistance(rTotal), 25, 41);
+
+  // Pin labels: 1, W, 2
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = 'bold 6.5px sans-serif';
+  ctx.fillText('1', 8, 56);
   ctx.fillText('W', 25, 56);
-  ctx.fillText('G', 42, 56);
+  ctx.fillText('2', 42, 56);
 
   if (inst.selected) drawSelectionRect(ctx, -3, 2, 56, 65);
   ctx.restore();

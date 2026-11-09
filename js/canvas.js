@@ -935,8 +935,24 @@ class CircuitCanvas {
     return ctrl.min;
   }
 
-  _formatSliderValue(value, ctrl) {
+  _formatSliderValue(value, ctrl, inst) {
     const v = Number(value);
+    if (inst && inst.type === 'potentiometer') {
+      if (ctrl.field === 'value') {
+        const rawRes = Number(inst.props?.resistance ?? inst.props?.value_res ?? 10000);
+        const unitMult = inst.props?.unit === 'MΩ' ? 1e6 : (inst.props?.unit === 'kΩ' ? 1e3 : 1);
+        const rTotal = Math.max(1, rawRes * (inst.props?.unit ? unitMult : (rawRes < 100 ? 1e3 : 1)));
+        const maxVal = Math.max(1, Number(inst.props?.maxValue) || 1023);
+        const ratio = Math.max(0, Math.min(1, v / maxVal));
+        const rW2 = ratio * rTotal;
+        const fmtR = rW2 >= 1e6 ? (rW2 / 1e6).toFixed(1) + 'MΩ' : (rW2 >= 1e3 ? (rW2 / 1e3).toFixed(1) + 'kΩ' : Math.round(rW2) + 'Ω');
+        return `${Math.round(ratio * 100)}% (${fmtR})`;
+      }
+      if (ctrl.field === 'resistance') {
+        const unit = inst.props?.unit || 'kΩ';
+        return `${v} ${unit}`;
+      }
+    }
     if (ctrl.field === 'timebase' && Number.isFinite(v)) return String(Number(v.toPrecision(3)));
     if (Number.isInteger(ctrl.step)) return String(Math.round(v));
     return String(Math.round(v * 10) / 10);
@@ -961,7 +977,7 @@ class CircuitCanvas {
     // Value badge
     ctx.textAlign = 'right';
     ctx.fillStyle = active ? '#00e5ff' : '#78909c';
-    ctx.fillText(this._formatSliderValue(value, ctrl) + (ctrl.unit || ''), rect.x + rect.width, rect.y - 2 * invZ);
+    ctx.fillText(this._formatSliderValue(value, ctrl, inst) + (ctrl.unit || ''), rect.x + rect.width, rect.y - 2 * invZ);
 
     // Track background
     ctx.fillStyle = '#0d1114';
@@ -3211,6 +3227,34 @@ class CircuitCanvas {
           const ie = rs.ie || 0;
           addRow('Emitter Current Ie', ie >= 1 ? ie.toFixed(2) + ' A' : (ie * 1e3).toFixed(2) + ' mA');
         }
+      } else if (inst.type === 'potentiometer') {
+        const rs = inst.runtimeState || {};
+        const maxVal = Math.max(1, Number(inst.props?.maxValue) || 1023);
+        const rawVal = Number(rs.value ?? inst.props?.value ?? 512);
+        const pct = Math.round((rawVal / maxVal) * 100);
+        const rTotal = rs.r_total || 10000;
+        const r1W = rs.r_1w || (rTotal * (1 - rawVal / maxVal));
+        const rW2 = rs.r_w2 || (rTotal * (rawVal / maxVal));
+
+        const fmtR = (r) => r >= 1e6 ? (r / 1e6).toFixed(1) + ' MΩ' : (r >= 1e3 ? (r / 1e3).toFixed(1) + ' kΩ' : Math.round(r) + ' Ω');
+
+        addRow('Track Resistance', fmtR(rTotal));
+        addRow('Wiper Position', `${pct}% (${rawVal}/${maxVal})`);
+        if (pin.id === 'vcc' || pin.id === 'p1' || pin.id === 'cw' || pin.id === 't1') {
+          addRow('Terminal', 'Pin 1 (Track Start)');
+          addRow('R(Pin 1 - Wiper)', fmtR(r1W));
+        } else if (pin.id === 'wiper' || pin.id === 'p2' || pin.id === 'out' || pin.id === 'w') {
+          addRow('Terminal', 'Wiper');
+          addRow('R(Wiper - Pin 2)', fmtR(rW2));
+          addRow('R(Pin 1 - Wiper)', fmtR(r1W));
+        } else if (pin.id === 'gnd' || pin.id === 'p3' || pin.id === 'ccw' || pin.id === 't2') {
+          addRow('Terminal', 'Pin 2 (Track End)');
+          addRow('R(Wiper - Pin 2)', fmtR(rW2));
+        }
+        if (this.engine) {
+          const v = this.engine.getVoltageAtPin(inst.id, pin.id);
+          if (v != null) addRow('Pin Voltage', v.toFixed(3) + ' V');
+        }
       }
       if (running) {
         const val = sim.pinStates ? (sim.pinStates[`pin_${pinNum}`] || 0) : 0;
@@ -4179,20 +4223,54 @@ class CircuitCanvas {
           break;
         }
         case 'potentiometer': {
-          const wiperPin = this._getConnectedPinNum(inst.id, 'wiper');
-          const vccNet = this._tracePinNet(inst.id, 'vcc');
-          const gndNet = this._tracePinNet(inst.id, 'gnd');
-          const hasGnd = gndNet.grounds.length > 0;
-          if (vccNet.sources.length > 0 && hasGnd) {
-            const src = vccNet.sources[0];
-            const val = inst.runtimeState.value !== undefined ? inst.runtimeState.value : (inst.props.value || 512);
-            const maxVal = inst.props.maxValue || 1023;
-            const ratio = Math.max(0, Math.min(1, val / maxVal));
-            const outVoltage = src.voltage * ratio;
-            const adcVal = Math.round((outVoltage / 5.0) * 1023);
+          const val = inst.runtimeState.value !== undefined ? inst.runtimeState.value : (inst.props.value || 512);
+          const maxVal = Math.max(1, Number(inst.props.maxValue) || 1023);
+          const ratio = Math.max(0, Math.min(1, val / maxVal));
+
+          const rawRes = Number(inst.props?.resistance ?? inst.props?.value_res ?? 10000);
+          const unitMult = inst.props?.unit === 'MΩ' ? 1e6 : (inst.props?.unit === 'kΩ' ? 1e3 : 1);
+          const rTotal = Math.max(1, rawRes * (inst.props?.unit ? unitMult : (rawRes < 100 ? 1e3 : 1)));
+          const r1W = Math.max(0.01, (1 - ratio) * rTotal);
+          const rW2 = Math.max(0.01, ratio * rTotal);
+
+          inst.runtimeState.r_total = rTotal;
+          inst.runtimeState.r_1w = r1W;
+          inst.runtimeState.r_w2 = rW2;
+          inst.runtimeState.ratio = ratio;
+
+          const wiperPin = this._getConnectedPinNum(inst.id, 'wiper')
+            ?? this._getConnectedPinNum(inst.id, 'p2')
+            ?? this._getConnectedPinNum(inst.id, 'out')
+            ?? this._getConnectedPinNum(inst.id, 'w');
+
+          let vWiper = null;
+          if (this.engine) {
+            vWiper = this.engine.getVoltageAtPin(inst.id, 'wiper')
+              ?? this.engine.getVoltageAtPin(inst.id, 'p2')
+              ?? this.engine.getVoltageAtPin(inst.id, 'out')
+              ?? this.engine.getVoltageAtPin(inst.id, 'w');
+          }
+
+          if (vWiper != null) {
+            inst.runtimeState.voltage = vWiper;
+            const adcVal = Math.max(0, Math.min(1023, Math.round((vWiper / 5.0) * 1023)));
             inst.runtimeState.wiper = adcVal;
             if (wiperPin !== null && window.ArduinoSim && window.ArduinoSim.pinStates) {
               window.ArduinoSim.pinStates[`pin_${wiperPin}`] = adcVal;
+            }
+          } else {
+            const vccNet = this._tracePinNet(inst.id, 'vcc');
+            const gndNet = this._tracePinNet(inst.id, 'gnd');
+            const hasGnd = gndNet.grounds.length > 0;
+            if (vccNet.sources.length > 0 && hasGnd) {
+              const src = vccNet.sources[0];
+              const outVoltage = src.voltage * ratio;
+              const adcVal = Math.round((outVoltage / 5.0) * 1023);
+              inst.runtimeState.voltage = outVoltage;
+              inst.runtimeState.wiper = adcVal;
+              if (wiperPin !== null && window.ArduinoSim && window.ArduinoSim.pinStates) {
+                window.ArduinoSim.pinStates[`pin_${wiperPin}`] = adcVal;
+              }
             }
           }
           break;
@@ -4779,8 +4857,8 @@ class CircuitCanvas {
             const wireTarget = this._getWireTarget(inst.id, id);
             if (wireTarget) {
               const other = wireTarget.inst;
-              if (other.type === 'potentiometer' && wireTarget.pinId === 'wiper') {
-                return (other.runtimeState?.wiper || 0) * 5.0 / 1023.0;
+              if (other.type === 'potentiometer' && (wireTarget.pinId === 'wiper' || wireTarget.pinId === 'p2' || wireTarget.pinId === 'out' || wireTarget.pinId === 'w')) {
+                return other.runtimeState?.voltage ?? ((other.runtimeState?.wiper || 0) * 5.0 / 1023.0);
               }
               if (other.type === 'lm741' && wireTarget.pinId === 'OUT') {
                 return other.runtimeState?.vOut || 0;
@@ -4811,7 +4889,9 @@ class CircuitCanvas {
             const target = this._getWireTarget(inst.id, pid);
             if (target) {
               const o = target.inst;
-              if (o.type === 'potentiometer' && target.pinId === 'wiper') return ((o.runtimeState?.wiper || 0) / 1023) * 5.0;
+              if (o.type === 'potentiometer' && (target.pinId === 'wiper' || target.pinId === 'p2' || target.pinId === 'out' || target.pinId === 'w')) {
+                return o.runtimeState?.voltage ?? (((o.runtimeState?.wiper || 0) / 1023) * 5.0);
+              }
               if (o.type === 'power_5v') return 5.0;
               if (o.type === 'power_gnd') return 0;
               if (o.runtimeState?.[target.pinId] != null) return o.runtimeState[target.pinId];
@@ -4842,7 +4922,9 @@ class CircuitCanvas {
             const target = this._getWireTarget(inst.id, pid);
             if (target) {
               const o = target.inst;
-              if (o.type === 'potentiometer' && target.pinId === 'wiper') return ((o.runtimeState?.wiper || 0) / 1023) * 5.0;
+              if (o.type === 'potentiometer' && (target.pinId === 'wiper' || target.pinId === 'p2' || target.pinId === 'out' || target.pinId === 'w')) {
+                return o.runtimeState?.voltage ?? (((o.runtimeState?.wiper || 0) / 1023) * 5.0);
+              }
               if (o.type === 'power_5v') return 5.0;
               if (o.type === 'power_gnd') return 0;
               if (o.runtimeState?.[target.pinId] != null) return o.runtimeState[target.pinId];
@@ -4871,7 +4953,9 @@ class CircuitCanvas {
             const target = this._getWireTarget(inst.id, pid);
             if (target) {
               const o = target.inst;
-              if (o.type === 'potentiometer' && target.pinId === 'wiper') return ((o.runtimeState?.wiper || 0) / 1023) * 5.0;
+              if (o.type === 'potentiometer' && (target.pinId === 'wiper' || target.pinId === 'p2' || target.pinId === 'out' || target.pinId === 'w')) {
+                return o.runtimeState?.voltage ?? (((o.runtimeState?.wiper || 0) / 1023) * 5.0);
+              }
               if (o.type === 'power_5v') return 5.0;
               if (o.type === 'power_gnd') return 0;
               if (o.runtimeState?.[target.pinId] != null) return o.runtimeState[target.pinId];
@@ -5317,7 +5401,10 @@ class CircuitCanvas {
                 displayUnit = '';
                 displayMode = 'Ω';
               } else {
-                const totalR = this._measureResistanceBetween(inst.id, 'probe_red', inst.id, 'probe_com');
+                let totalR = this._measureResistanceBetween(inst.id, 'probe_red', inst.id, 'probe_com');
+                if ((!Number.isFinite(totalR) || totalR <= 0) && this.engine && typeof this.engine.measureResistance === 'function') {
+                  totalR = this.engine.measureResistance(inst.id, 'probe_red', inst.id, 'probe_com');
+                }
                 if (totalR < Infinity && totalR > 0) {
                   let disp = totalR;
                   let pfx = '';
@@ -5336,7 +5423,10 @@ class CircuitCanvas {
               break;
             }
             case 'CONT': {
-              const totalR = this._measureResistanceBetween(inst.id, 'probe_red', inst.id, 'probe_com');
+              let totalR = this._measureResistanceBetween(inst.id, 'probe_red', inst.id, 'probe_com');
+              if ((!Number.isFinite(totalR) || totalR <= 0) && this.engine && typeof this.engine.measureResistance === 'function') {
+                totalR = this.engine.measureResistance(inst.id, 'probe_red', inst.id, 'probe_com');
+              }
               const threshold = 40;
               if (totalR <= threshold && totalR > 0) {
                 displayText = totalR.toFixed(1);
@@ -5542,6 +5632,33 @@ class CircuitCanvas {
           if (cIn && !bIn && !eIn) sum += (rs.ic || 0);
           else if (bIn && !cIn && !eIn) sum += (rs.ib || 0);
           else if (eIn && !cIn && !bIn) sum += (rs.ie || 0);
+          continue;
+        }
+        if (comp.type === 'potentiometer') {
+          const rs = comp.runtimeState || {};
+          const r1W = rs.r_1w || 5000;
+          const rW2 = rs.r_w2 || 5000;
+          const in1 = group.has(`${comp.id}:vcc`) || group.has(`${comp.id}:p1`) || group.has(`${comp.id}:cw`) || group.has(`${comp.id}:t1`);
+          const inW = group.has(`${comp.id}:wiper`) || group.has(`${comp.id}:p2`) || group.has(`${comp.id}:out`) || group.has(`${comp.id}:w`);
+          const in2 = group.has(`${comp.id}:gnd`) || group.has(`${comp.id}:p3`) || group.has(`${comp.id}:ccw`) || group.has(`${comp.id}:t2`);
+
+          const net1 = engine.getNetForPin(comp.id, 'vcc');
+          const netW = engine.getNetForPin(comp.id, 'wiper');
+          const net2 = engine.getNetForPin(comp.id, 'gnd');
+
+          if (in1 !== inW && net1 && netW) {
+            const outNet = in1 ? netW : net1;
+            sum += (vNet - outNet.voltage) / r1W;
+          }
+          if (inW !== in2 && netW && net2) {
+            const outNet = inW ? net2 : netW;
+            sum += (vNet - outNet.voltage) / rW2;
+          }
+          if (!netW && in1 !== in2 && net1 && net2) {
+            const rTot = rs.r_total || (r1W + rW2);
+            const outNet = in1 ? net2 : net1;
+            sum += (vNet - outNet.voltage) / rTot;
+          }
           continue;
         }
         const r = branchResistance(comp);
@@ -6471,6 +6588,29 @@ class CircuitCanvas {
         addEdge(key('anode'), key('cathode'), 12);
       } else if (inst.type === 'diode_1n4007') {
         addEdge(key('anode'), key('cathode'), 0.7);
+      } else if (inst.type === 'potentiometer') {
+        const rawRes = Number(inst.props?.resistance ?? inst.props?.value_res ?? 10000);
+        const unitMult = inst.props?.unit === 'MΩ' ? 1e6 : (inst.props?.unit === 'kΩ' ? 1e3 : 1);
+        const rTotal = Math.max(1, rawRes * (inst.props?.unit ? unitMult : (rawRes < 100 ? 1e3 : 1)));
+        const maxVal = Math.max(1, Number(inst.props?.maxValue) || 1023);
+        const rawVal = Number(inst.runtimeState?.value ?? inst.props?.value ?? 512);
+        const ratio = Math.max(0, Math.min(1, rawVal / maxVal));
+
+        const r1W = Math.max(0.01, (1 - ratio) * rTotal);
+        const rW2 = Math.max(0.01, ratio * rTotal);
+
+        addEdge(key('p1'), key('vcc'), 0);
+        addEdge(key('cw'), key('vcc'), 0);
+        addEdge(key('t1'), key('vcc'), 0);
+        addEdge(key('p2'), key('wiper'), 0);
+        addEdge(key('out'), key('wiper'), 0);
+        addEdge(key('w'), key('wiper'), 0);
+        addEdge(key('p3'), key('gnd'), 0);
+        addEdge(key('ccw'), key('gnd'), 0);
+        addEdge(key('t2'), key('gnd'), 0);
+
+        addEdge(key('vcc'), key('wiper'), r1W);
+        addEdge(key('wiper'), key('gnd'), rW2);
       }
     }
 
@@ -6692,8 +6832,8 @@ class CircuitCanvas {
       return v >= 2.5 ? 1 : 0;
     }
 
-    if (other.type === 'potentiometer' && targetPin === 'wiper') {
-      const v = (other.runtimeState && other.runtimeState.voltage) || 0;
+    if (other.type === 'potentiometer' && (targetPin === 'wiper' || targetPin === 'p2' || targetPin === 'out' || targetPin === 'w')) {
+      const v = (other.runtimeState && (other.runtimeState.voltage ?? ((other.runtimeState.wiper || 0) / 1023 * 5.0))) || 0;
       return v >= 2.5 ? 1 : 0;
     }
 
@@ -6759,7 +6899,7 @@ class CircuitCanvas {
       return false;
     }
     if (other.type === 'func_gen') return true;
-    if (other.type === 'potentiometer' && targetPin === 'wiper') return true;
+    if (other.type === 'potentiometer' && (targetPin === 'wiper' || targetPin === 'p2' || targetPin === 'out' || targetPin === 'w')) return true;
     const pn = this._getConnectedPinNum(fromInstId, pinId);
     if (pn !== null) return true;
     const icSpec = IC_OUTPUT_MAP[other.type];
@@ -6821,7 +6961,18 @@ class CircuitCanvas {
     // For a potentiometer wiper, return the component's live value directly.
     // Do this before resolving the Arduino pin number; otherwise analogRead()
     // can simply read the previous cached pinState value.
-    if (other.type === 'potentiometer' && wireTarget.pinId === 'wiper') {
+    if (other.type === 'potentiometer' && (wireTarget.pinId === 'wiper' || wireTarget.pinId === 'p2' || wireTarget.pinId === 'out' || wireTarget.pinId === 'w')) {
+      if (this.engine && typeof this.engine.getVoltageAtPin === 'function') {
+        const v = this.engine.getVoltageAtPin(other.id, wireTarget.pinId)
+          ?? this.engine.getVoltageAtPin(other.id, 'wiper')
+          ?? this.engine.getVoltageAtPin(other.id, 'p2');
+        if (Number.isFinite(v)) {
+          const src = this.components.find(c => c.id === fromInstId);
+          const vRef = (src && (src.type === 'esp32_devkit_v1' || src.type === 'stm32f746_disco'
+            || src.type === 'lpc2148' || src.type === 'pico2w')) ? 3.3 : 5.0;
+          return Math.max(0, Math.min(1023, Math.round((v / vRef) * 1023)));
+        }
+      }
       const value = other.runtimeState?.value ?? other.props?.value ?? 512;
       const maxValue = Number(other.props?.maxValue ?? 1023);
       return Math.max(0, Math.min(1023, Math.round((Number(value) / maxValue) * 1023)));
