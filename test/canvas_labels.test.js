@@ -187,4 +187,134 @@ describe('circuit labels and annotations', () => {
     canvas.undo();
     expect(canvas.annotations[0]).toMatchObject({ x: 10, y: 20 });
   });
+
+  it('edits, changes colour, and resets component labels', () => {
+    const canvas = createCanvas();
+    const comp = {
+      id: 'r1',
+      type: 'test_component',
+      x: 50,
+      y: 60,
+      props: { label: 'R1' },
+    };
+    canvas.components = [comp];
+
+    // Change label text
+    canvas.setComponentLabel('r1', 'R1 (10k)');
+    expect(comp.props.label).toBe('R1 (10k)');
+
+    // Change label colour
+    canvas.setComponentLabelColor('r1', '#4CAF50');
+    expect(comp.props.labelColor).toBe('#4CAF50');
+
+    // Move label via offset
+    canvas.setComponentLabelOffset('r1', 15, -20);
+    expect(comp.props.labelOffsetX).toBe(15);
+    expect(comp.props.labelOffsetY).toBe(-20);
+
+    // Serialization preserves label, color, and offset
+    const serialized = canvas.serialize();
+    expect(serialized.components[0].props).toMatchObject({
+      label: 'R1 (10k)',
+      labelColor: '#4CAF50',
+      labelOffsetX: 15,
+      labelOffsetY: -20,
+    });
+
+    // Deserialization restores them
+    const newCanvas = createCanvas();
+    newCanvas.deserialize(serialized);
+    expect(newCanvas.components[0].props).toMatchObject({
+      label: 'R1 (10k)',
+      labelColor: '#4CAF50',
+      labelOffsetX: 15,
+      labelOffsetY: -20,
+    });
+
+    // Reset label offset
+    canvas.resetComponentLabelOffset('r1');
+    expect(canvas.components[0].props.labelOffsetX).toBeUndefined();
+    expect(canvas.components[0].props.labelOffsetY).toBeUndefined();
+
+    // Undo / redo works for label changes
+    canvas.undo(); // undo reset offset
+    expect(canvas.components[0].props.labelOffsetX).toBe(15);
+    expect(canvas.components[0].props.labelOffsetY).toBe(-20);
+  });
+
+  it('supports hit testing, dragging, and double-click editing of component labels', () => {
+    const canvas = createCanvas();
+    const comp = {
+      id: 'c1',
+      type: 'test_component',
+      x: 100,
+      y: 100,
+      props: { label: 'C1' },
+    };
+    canvas.components = [comp];
+
+    // Hit test component label (test_component has width 40, height 30, so base center is x=120, y=92)
+    const hit = canvas._hitTestComponentLabel(120, 92);
+    expect(hit).toBeTruthy();
+    expect(hit.inst).toBe(comp);
+
+    // Drag label
+    canvas._hitTestTag = () => null;
+    canvas._hidePinTooltip = vi.fn();
+    canvas._onMouseDown({
+      button: 0,
+      offsetX: 120,
+      offsetY: 92,
+      clientX: 120,
+      clientY: 92,
+    });
+    expect(canvas.mode).toBe('componentLabelDragging');
+
+    canvas._onMouseMove({
+      offsetX: 145,
+      offsetY: 82,
+      clientX: 145,
+      clientY: 82,
+    });
+    canvas._onMouseUp({});
+
+    expect(canvas.mode).toBe('idle');
+    expect(comp.props.labelOffsetX).toBe(25);
+    expect(comp.props.labelOffsetY).toBe(-10);
+
+    // Double-click to edit label text directly on canvas
+    window.prompt = vi.fn(() => 'C1 (100uF)');
+    canvas._onDblClick({
+      offsetX: 145,
+      offsetY: 82,
+    });
+    expect(comp.props.label).toBe('C1 (100uF)');
+
+    // Undo restores previous label text
+    canvas.undo();
+    expect(canvas.components[0].props.label).toBe('C1');
+  });
+
+  it('supports custom text annotation colors and editing', () => {
+    const canvas = createCanvas();
+    const ann = canvas.addTextAnnotation('Note', 50, 50, '#FFC107');
+    expect(ann.color).toBe('#FFC107');
+
+    // Update annotation color
+    canvas.setAnnotationColor(ann.id, '#E91E63');
+    expect(ann.color).toBe('#E91E63');
+
+    // Update annotation text
+    canvas.setAnnotationText(ann.id, 'High Voltage');
+    expect(ann.text).toBe('High Voltage');
+
+    // Serializes and restores color
+    const serialized = canvas.serialize();
+    expect(serialized.annotations[0].color).toBe('#E91E63');
+
+    const newCanvas = createCanvas();
+    newCanvas.deserialize(serialized);
+    expect(newCanvas.annotations[0].color).toBe('#E91E63');
+    expect(newCanvas.annotations[0].text).toBe('High Voltage');
+  });
 });

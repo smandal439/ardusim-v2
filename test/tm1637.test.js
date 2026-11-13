@@ -95,11 +95,15 @@ function makeCircuit({ second = false } = {}) {
   const wires = [
     { id: 'w1', from: { instId: 'b1', pinId: 'D2' }, to: { instId: 'd1', pinId: 'CLK' } },
     { id: 'w2', from: { instId: 'b1', pinId: 'D3' }, to: { instId: 'd1', pinId: 'DIO' } },
+    { id: 'w_vcc1', from: { instId: 'b1', pinId: '5V' }, to: { instId: 'd1', pinId: 'VCC' } },
+    { id: 'w_gnd1', from: { instId: 'b1', pinId: 'GND1' }, to: { instId: 'd1', pinId: 'GND' } },
   ];
   if (second) {
     components.push({ id: 'd2', type: 'tm1637', x: 400, y: 100, props: {}, runtimeState: {} });
     wires.push({ id: 'w3', from: { instId: 'b1', pinId: 'D5' }, to: { instId: 'd2', pinId: 'CLK' } });
     wires.push({ id: 'w4', from: { instId: 'b1', pinId: 'D6' }, to: { instId: 'd2', pinId: 'DIO' } });
+    wires.push({ id: 'w_vcc2', from: { instId: 'b1', pinId: '5V' }, to: { instId: 'd2', pinId: 'VCC' } });
+    wires.push({ id: 'w_gnd2', from: { instId: 'b1', pinId: 'GND2' }, to: { instId: 'd2', pinId: 'GND' } });
   }
   return { components, wires };
 }
@@ -283,10 +287,18 @@ describe('tm1637 — multi-module CLK targeting', () => {
     expect(rig.d1.runtimeState.digits).toBeUndefined(); // never touched
   });
 
-  it('falls back to the first module when no CLK matches', () => {
+  it('does not push when no CLK/DIO matches', () => {
     const modX = TM_LIB.constructor(99, 99);
     modX.showNumberDec(7);
-    expect(rig.d1.runtimeState.digits).toEqual([0, 0, 0, DIGITS[7]]);
+    expect(rig.d1.runtimeState.digits).toBeUndefined();
+    expect(rig.d2.runtimeState.digits).toBeUndefined();
+  });
+
+  it('does not push when wires are removed', () => {
+    rig.cc.wires = [];
+    const mod = TM_LIB.constructor(2, 3);
+    mod.showNumberDec(7);
+    expect(rig.d1.runtimeState.digits).toBeUndefined();
   });
 });
 
@@ -493,5 +505,108 @@ describe('tm1637 — guide & example integration', () => {
 
   it('is included in the generated examples data', () => {
     expect(readSrc('js/examples-data.js')).toContain('"tm1637_clock"');
+  });
+});
+
+describe('tm1637 — wire disconnection and power checks', () => {
+  let rig;
+  const DEF = global.window.ArduinoComponents.COMPONENT_DEFS.tm1637;
+  function recordCtx() {
+    const state = { shadowBlurVals: [], fills: 0, gradients: 0, stopColors: [] };
+    const ctx = new Proxy({ state }, {
+      get(t, prop) {
+        if (prop === 'state') return state;
+        if (prop === 'measureText') return () => ({ width: 0 });
+        if (prop === 'createLinearGradient' || prop === 'createRadialGradient') {
+          return () => { state.gradients++; return { addColorStop(_s, c) { state.stopColors.push(String(c)); } }; };
+        }
+        if (prop === 'fill') return () => { state.fills++; };
+        if (prop in t) return t[prop];
+        return () => {};
+      },
+      set(t, prop, v) {
+        if (prop === 'shadowBlur') state.shadowBlurVals.push(v);
+        t[prop] = v;
+        return true;
+      },
+    });
+    return ctx;
+  }
+  const maxBlur = (ctx) => (ctx.state.shadowBlurVals.length ? Math.max(...ctx.state.shadowBlurVals) : 0);
+
+  beforeEach(() => { rig = buildRig(makeCircuit()); });
+  afterEach(() => { global.window.ArduinoSim = null; global.window.CircuitCanvas = null; });
+
+  it('stops receiving updates if CLK wire is disconnected', () => {
+    const mod = TM_LIB.constructor(2, 3);
+    mod.showNumberDec(1234);
+    expect(rig.d1.runtimeState.digits).toEqual([DIGITS[1], DIGITS[2], DIGITS[3], DIGITS[4]]);
+
+    // Disconnect CLK wire
+    rig.cc.wires = rig.cc.wires.filter(w => w.id !== 'w1');
+    mod.showNumberDec(5678);
+    // Should NOT have updated to 5678
+    expect(rig.d1.runtimeState.digits).toEqual([DIGITS[1], DIGITS[2], DIGITS[3], DIGITS[4]]);
+  });
+
+  it('stops receiving updates if DIO wire is disconnected', () => {
+    const mod = TM_LIB.constructor(2, 3);
+    mod.showNumberDec(1234);
+    expect(rig.d1.runtimeState.digits).toEqual([DIGITS[1], DIGITS[2], DIGITS[3], DIGITS[4]]);
+
+    // Disconnect DIO wire
+    rig.cc.wires = rig.cc.wires.filter(w => w.id !== 'w2');
+    mod.showNumberDec(5678);
+    // Should NOT have updated to 5678
+    expect(rig.d1.runtimeState.digits).toEqual([DIGITS[1], DIGITS[2], DIGITS[3], DIGITS[4]]);
+  });
+
+  it('goes dark when VCC wire is disconnected', () => {
+    rig.d1.runtimeState = { digits: [DIGITS[1], DIGITS[2], DIGITS[3], DIGITS[4]], colon: 1, brightness: 7, on: true };
+    const onCtx = recordCtx();
+    DEF.draw(onCtx, rig.d1);
+    expect(maxBlur(onCtx)).toBeGreaterThan(0);
+
+    // Disconnect VCC wire
+    rig.cc.wires = rig.cc.wires.filter(w => w.id !== 'w_vcc1');
+    const offCtx = recordCtx();
+    DEF.draw(offCtx, rig.d1);
+    expect(maxBlur(offCtx)).toBe(0);
+  });
+
+  it('goes dark when GND wire is disconnected', () => {
+    rig.d1.runtimeState = { digits: [DIGITS[1], DIGITS[2], DIGITS[3], DIGITS[4]], colon: 1, brightness: 7, on: true };
+    const onCtx = recordCtx();
+    DEF.draw(onCtx, rig.d1);
+    expect(maxBlur(onCtx)).toBeGreaterThan(0);
+
+    // Disconnect GND wire
+    rig.cc.wires = rig.cc.wires.filter(w => w.id !== 'w_gnd1');
+    const offCtx = recordCtx();
+    DEF.draw(offCtx, rig.d1);
+    expect(maxBlur(offCtx)).toBe(0);
+  });
+
+  it('stops working completely when all wires are removed in running condition', () => {
+    const mod = TM_LIB.constructor(2, 3);
+    mod.showNumberDec(1234);
+    rig.d1.runtimeState.on = true;
+
+    // Remove all wires from d1
+    rig.cc.wires = [];
+    rig.cc.updateSimState(rig.sim.pinStates);
+
+    // Digits are cleared on power loss
+    expect(rig.d1.runtimeState.digits).toEqual([0, 0, 0, 0]);
+    expect(rig.d1.runtimeState.powered).toBe(false);
+
+    // New writes are rejected
+    mod.showNumberDec(9999);
+    expect(rig.d1.runtimeState.digits).toEqual([0, 0, 0, 0]);
+
+    // Canvas draw renders dark
+    const ctx = recordCtx();
+    DEF.draw(ctx, rig.d1);
+    expect(maxBlur(ctx)).toBe(0);
   });
 });

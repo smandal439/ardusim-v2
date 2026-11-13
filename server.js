@@ -523,7 +523,7 @@ server.listen(PORT, HOST, () => {
     if (lanIp !== '127.0.0.1') break;
   }
   console.log(`\n  ┌──────────────────────────────────────────────┐`);
-  console.log(`  │  ArduSim server running                       │`);
+  console.log(`  │  ArduSim V2 server running                       │`);
   console.log(`  │                                                │`);
   console.log(`  │  Local:   http://localhost:${PORT}               │`);
   console.log(`  │  Network: http://${lanIp}:${PORT}  │`);

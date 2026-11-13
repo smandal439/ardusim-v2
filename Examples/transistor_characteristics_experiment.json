@@ -76,7 +76,10 @@
         "y": 90,
         "rotation": 0,
         "props": {
-          "voltage": 9.0
+          "voltage": 4.2,
+          "capacity_mah": 5000,
+          "r_int": 0.15,
+          "label": "Li-Ion Battery"
         }
       },
       {

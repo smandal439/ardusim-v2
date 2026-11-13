@@ -3017,10 +3017,18 @@ _newProject() {
 
     const compGroup   = document.getElementById('ctx-comp-group');
     const wireGroup   = document.getElementById('ctx-wire-group');
+    const annGroup    = document.getElementById('ctx-annotation-group');
     const itemDelete  = document.getElementById('ctx-delete');
     const itemProps   = document.getElementById('ctx-props');
     const itemDuplicate = document.getElementById('ctx-duplicate');
     const itemRotate  = document.getElementById('ctx-rotate');
+    const itemEditLabel = document.getElementById('ctx-edit-label');
+    const labelPalette = document.getElementById('label-palette');
+    const labelColorPicker = document.getElementById('ctx-label-color-picker');
+    const resetLabelPosBtn = document.getElementById('ctx-reset-label-pos');
+    const itemEditAnn = document.getElementById('ctx-edit-annotation');
+    const annPalette  = document.getElementById('annotation-palette');
+    const annColorPicker = document.getElementById('ctx-ann-color-picker');
     const itemWireAuto = document.getElementById('ctx-wire-auto');
     const wirePalette = document.getElementById('wire-palette');
     const itemWireOrthogonal = document.getElementById('ctx-wire-orthogonal');
@@ -3031,10 +3039,48 @@ _newProject() {
 
     const isWire = inst && (inst.type === 'wire' || !!inst.wire);
     const wireObj = isWire ? (inst.wire || inst) : null;
+    const isAnn = inst && (inst.type === 'annotation' || !!inst.annotation);
+    const annObj = isAnn ? (inst.annotation || inst) : null;
 
-    if (isWire) {
+    if (isAnn) {
+      if (compGroup) compGroup.classList.add('hidden');
+      if (wireGroup) wireGroup.classList.add('hidden');
+      if (annGroup) annGroup.classList.remove('hidden');
+
+      if (itemEditAnn) {
+        itemEditAnn.onclick = () => {
+          const newText = window.prompt('Edit annotation text:', annObj.text);
+          if (newText !== null && newText.trim() && newText !== annObj.text) {
+            this.canvas?.setAnnotationText(annObj.id, newText.trim());
+          }
+          cleanup();
+        };
+      }
+
+      const curAnnColor = (annObj.color || '#ffffff').toLowerCase();
+      if (annPalette) {
+        annPalette.querySelectorAll('.ann-color-btn').forEach(btn => {
+          const isSelected = btn.dataset.color.toLowerCase() === curAnnColor;
+          btn.classList.toggle('active', isSelected);
+          btn.onclick = (e) => {
+            e.stopPropagation();
+            this.canvas?.setAnnotationColor(annObj.id, btn.dataset.color);
+            cleanup();
+          };
+        });
+      }
+
+      if (annColorPicker) {
+        annColorPicker.value = annObj.color || '#ffffff';
+        annColorPicker.oninput = (e) => {
+          this.canvas?.setAnnotationColor(annObj.id, e.target.value);
+        };
+        annColorPicker.onchange = () => cleanup();
+      }
+    } else if (isWire) {
       if (compGroup) compGroup.classList.add('hidden');
       if (wireGroup) wireGroup.classList.remove('hidden');
+      if (annGroup) annGroup.classList.add('hidden');
 
       // Highlight current wire color in palette
       if (wirePalette) {
@@ -3086,6 +3132,7 @@ _newProject() {
     } else {
       if (compGroup) compGroup.classList.remove('hidden');
       if (wireGroup) wireGroup.classList.add('hidden');
+      if (annGroup) annGroup.classList.add('hidden');
 
       itemProps?.removeEventListener('click', itemProps._handler);
       itemProps._handler = () => { if (inst) this.openPropsModal(inst); cleanup(); };
@@ -3098,11 +3145,53 @@ _newProject() {
       itemRotate?.removeEventListener('click', itemRotate._handler);
       itemRotate._handler = () => { this.canvas?.rotateSelected?.(); cleanup(); };
       itemRotate?.addEventListener('click', itemRotate._handler, { once: true });
+
+      if (itemEditLabel) {
+        itemEditLabel.onclick = () => {
+          const def = window.ArduinoComponents?.COMPONENT_DEFS?.[inst?.type];
+          const curLabel = inst?.props?.label || (def?.hideLabel ? '' : ((def && def.name) || inst?.type));
+          const newLabel = window.prompt('Edit component label:', curLabel);
+          if (newLabel !== null && inst) {
+            this.canvas?.setComponentLabel(inst.id, newLabel.trim());
+          }
+          cleanup();
+        };
+      }
+
+      const curLabelColor = (inst?.props?.labelColor || '#ffffff').toLowerCase();
+      if (labelPalette) {
+        labelPalette.querySelectorAll('.label-color-btn').forEach(btn => {
+          const isSelected = btn.dataset.color.toLowerCase() === curLabelColor;
+          btn.classList.toggle('active', isSelected);
+          btn.onclick = (e) => {
+            e.stopPropagation();
+            if (inst) this.canvas?.setComponentLabelColor(inst.id, btn.dataset.color);
+            cleanup();
+          };
+        });
+      }
+
+      if (labelColorPicker) {
+        labelColorPicker.value = inst?.props?.labelColor || '#ffffff';
+        labelColorPicker.oninput = (e) => {
+          if (inst) this.canvas?.setComponentLabelColor(inst.id, e.target.value);
+        };
+        labelColorPicker.onchange = () => cleanup();
+      }
+
+      const hasOffset = !!(inst?.props?.labelOffsetX || inst?.props?.labelOffsetY);
+      if (resetLabelPosBtn) {
+        resetLabelPosBtn.classList.toggle('hidden', !hasOffset);
+        resetLabelPosBtn.onclick = () => {
+          if (inst) this.canvas?.resetComponentLabelOffset(inst.id);
+          cleanup();
+        };
+      }
     }
 
-      itemDelete?.removeEventListener('click', itemDelete._handler);
-      itemDelete._handler = () => { this.canvas?.deleteSelected(); cleanup(); };
-      itemDelete?.addEventListener('click', itemDelete._handler, { once: true });
+    itemDelete?.removeEventListener('click', itemDelete._handler);
+    itemDelete._handler = () => { this.canvas?.deleteSelected(); cleanup(); };
+    itemDelete?.addEventListener('click', itemDelete._handler, { once: true });
 
     // Dynamic component-specific context menu items
     const existingCustom = menu.querySelectorAll('.ctx-custom-item');
@@ -3835,8 +3924,64 @@ _newProject() {
     labelRow.appendChild(labelInput);
     rows.push(labelRow);
 
+    const labelColorRow = document.createElement('div');
+    labelColorRow.className = 'prop-row';
+    const labelColorLabel = document.createElement('label');
+    labelColorLabel.textContent = 'Label Color';
+    labelColorLabel.className = 'prop-label';
+    labelColorLabel.htmlFor = 'prop-label-color';
+    const labelColorWrapper = document.createElement('div');
+    labelColorWrapper.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    const labelColorInput = document.createElement('input');
+    labelColorInput.className = 'prop-input';
+    labelColorInput.name = 'labelColor';
+    labelColorInput.id = 'prop-label-color';
+    labelColorInput.type = 'color';
+    labelColorInput.value = comp.props?.labelColor || '#ffffff';
+    labelColorInput.style.cssText = 'width:42px;height:28px;padding:1px;border-radius:4px;border:1px solid var(--border);cursor:pointer;background:transparent;';
+
+    const presetLabelColors = ['#ffffff', '#4caf50', '#2196f3', '#f44336', '#ffc107', '#ff9800', '#00bcd4'];
+    const swatchGroup = document.createElement('div');
+    swatchGroup.style.cssText = 'display:flex;gap:4px;align-items:center;';
+    presetLabelColors.forEach(c => {
+      const sw = document.createElement('button');
+      sw.type = 'button';
+      sw.style.cssText = `width:18px;height:18px;border-radius:50%;background:${c};border:1px solid rgba(255,255,255,0.3);cursor:pointer;padding:0;`;
+      sw.title = c;
+      sw.onclick = () => { labelColorInput.value = c; };
+      swatchGroup.appendChild(sw);
+    });
+    labelColorWrapper.appendChild(labelColorInput);
+    labelColorWrapper.appendChild(swatchGroup);
+    labelColorRow.appendChild(labelColorLabel);
+    labelColorRow.appendChild(labelColorWrapper);
+    rows.push(labelColorRow);
+
+    if (comp.props?.labelOffsetX || comp.props?.labelOffsetY) {
+      const resetPosRow = document.createElement('div');
+      resetPosRow.className = 'prop-row';
+      const resetPosLabel = document.createElement('label');
+      resetPosLabel.textContent = 'Label Position';
+      resetPosLabel.className = 'prop-label';
+      const resetBtn = document.createElement('button');
+      resetBtn.type = 'button';
+      resetBtn.className = 'gh-btn gh-btn-sm';
+      resetBtn.textContent = 'Reset to Default';
+      resetBtn.onclick = () => {
+        this.canvas?.resetComponentLabelOffset(comp.id);
+        resetPosRow.remove();
+        if (this.showToast) this.showToast('Label position reset', 'info');
+      };
+      resetPosRow.appendChild(resetPosLabel);
+      resetPosRow.appendChild(resetBtn);
+      rows.push(resetPosRow);
+    }
+
     Object.entries(comp.props || {}).forEach(([key, value]) => {
       if (key === 'label') return;
+      if (key === 'labelColor') return;
+      if (key === 'labelOffsetX') return;
+      if (key === 'labelOffsetY') return;
       if (key === 'colorName') return; // derived from the colour select — never editable
       if (key === 'forcedInputs') return; // canvas input-tag force state, not an editable field
       if (key === 'attach') return; // canvas tag anchor { instId, pinId }, not an editable field
@@ -3987,9 +4132,12 @@ _newProject() {
     const defs = (window.ArduinoComponents && window.ArduinoComponents.COMPONENT_DEFS) || {};
     const def = defs[this._propsComp.type];
     const labelInput = body.querySelector('.prop-input[name="label"]');
+    const labelColorInput = body.querySelector('.prop-input[name="labelColor"]');
     const currentLabel = this._propsComp.props?.label || (def?.hideLabel ? '' : ((def && def.name) || this._propsComp.type));
     const labelChanged = !!labelInput && labelInput.value !== currentLabel;
-    if (labelChanged) this.canvas?._pushHistory?.();
+    const curColor = this._propsComp.props?.labelColor || '#ffffff';
+    const colorChanged = !!labelColorInput && labelColorInput.value !== curColor;
+    if (labelChanged || colorChanged) this.canvas?._pushHistory?.();
     this._propsComp.props = this._propsComp.props || {};
     const clampPropValue = window.ArduinoComponents && window.ArduinoComponents.clampPropValue;
     const LED_COLORS = [
@@ -4033,7 +4181,7 @@ _newProject() {
       }
     });
     this.canvas?._onChanged?.();
-    if (labelChanged) this.canvas?._pushHistory?.();
+    if (labelChanged || colorChanged) this.canvas?._pushHistory?.();
     this._closeModal();
     this.showToast('Properties updated', 'success');
   }

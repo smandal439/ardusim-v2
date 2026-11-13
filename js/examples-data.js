@@ -5679,6 +5679,373 @@ window.EXAMPLE_SKETCHES = [
     "code": "/*\n * BH1750 Light Intensity Sensor Example\n *\n * Reads ambient light level in lux and controls an LED.\n * LED brightness adjusts automatically based on light conditions.\n *\n * Wiring:\n *   BH1750 VCC -> Arduino 5V\n *   BH1750 GND -> Arduino GND\n *   BH1750 SCL -> Arduino A5 (SCL)\n *   BH1750 SDA -> Arduino A4 (SDA)\n *   LED anode  -> Arduino D9 (PWM)\n *   LED cathode -> Arduino GND\n *\n * Light Levels Reference:\n *   0 lx       = Complete darkness\n *   10-50 lx   = Dark room\n *   100-200 lx = Living room (dim)\n *   400-500 lx = Office lighting\n *   750-1000 lx = Bright indoor\n *   10000-25000 lx = Overcast day\n *   30000-100000 lx = Direct sunlight\n */\n\n#include <Wire.h>\n#include <BH1750.h>\n\n// Create BH1750 instance\nBH1750 lightSensor;\n\n// LED pin\nconst int LED_PIN = 9;\n\n// Light level thresholds (in lux)\nconst float DARK_THRESHOLD = 50.0;\nconst float DIM_THRESHOLD = 200.0;\nconst float BRIGHT_THRESHOLD = 1000.0;\n\nvoid setup() {\n  Serial.begin(115200);\n  Serial.println(\"BH1750 Light Sensor Demo\");\n  Serial.println(\"=======================\");\n  \n  // Initialize I2C and sensor\n  Wire.begin();\n  \n  // Begin in continuous high-resolution mode\n  if (lightSensor.begin(BH1750::CONTINUOUS_HIGH_RES_MODE)) {\n    Serial.println(\"BH1750 initialized successfully!\");\n  } else {\n    Serial.println(\"Error: BH1750 not found!\");\n    while (1);\n  }\n  \n  // Set LED pin\n  pinMode(LED_PIN, OUTPUT);\n  \n  Serial.println();\n  delay(100);\n}\n\nvoid loop() {\n  // Read light level\n  float lux = lightSensor.readLightLevel();\n  \n  // Check for valid reading\n  if (lux < 0) {\n    Serial.println(\"Error reading sensor!\");\n    delay(1000);\n    return;\n  }\n  \n  // Map lux to LED brightness (0-255)\n  // Inverse relationship: darker = brighter LED\n  int ledBrightness;\n  \n  if (lux < DARK_THRESHOLD) {\n    // Very dark - LED at full brightness\n    ledBrightness = 255;\n  } else if (lux < DIM_THRESHOLD) {\n    // Dim lighting - LED moderately bright\n    ledBrightness = map(lux, DARK_THRESHOLD, DIM_THRESHOLD, 255, 128);\n  } else if (lux < BRIGHT_THRESHOLD) {\n    // Normal indoor - LED dim\n    ledBrightness = map(lux, DIM_THRESHOLD, BRIGHT_THRESHOLD, 128, 32);\n  } else {\n    // Bright daylight - LED off or very dim\n    ledBrightness = map(lux, BRIGHT_THRESHOLD, 10000, 32, 0);\n    ledBrightness = constrain(ledBrightness, 0, 32);\n  }\n  \n  // Apply brightness\n  analogWrite(LED_PIN, ledBrightness);\n  \n  // Print to Serial Monitor\n  Serial.print(\"Light: \");\n  Serial.print(lux, 1);\n  Serial.print(\" lx | LED: \");\n  Serial.print(ledBrightness);\n  Serial.print(\"/255 | \");\n  \n  // Print light condition\n  if (lux < DARK_THRESHOLD) {\n    Serial.println(\"DARK - LED ON full\");\n  } else if (lux < DIM_THRESHOLD) {\n    Serial.println(\"DIM - LED medium\");\n  } else if (lux < BRIGHT_THRESHOLD) {\n    Serial.println(\"NORMAL - LED dim\");\n  } else {\n    Serial.println(\"BRIGHT - LED OFF\");\n  }\n  \n  // Update every 500ms\n  delay(500);\n}"
   },
   {
+    "id": "transistor_characteristics_experiment",
+    "name": "BJT Transistor Characteristics Experiment",
+    "icon": "📈",
+    "desc": "Study NPN BJT Common Emitter input and output characteristics (Cutoff, Active, Saturation regions, Early effect, and current amplification) with multimeters.",
+    "tags": [
+      "transistor",
+      "bjt",
+      "characteristics",
+      "electronics",
+      "physics",
+      "lab"
+    ],
+    "circuit": {
+      "components": [
+        {
+          "id": "q1",
+          "type": "npn_transistor",
+          "x": 420,
+          "y": 240,
+          "rotation": 0,
+          "props": {
+            "model": "2N2222",
+            "beta": 160,
+            "vbe_on": 0.65,
+            "vce_sat": 0.2,
+            "early_voltage": 100
+          }
+        },
+        {
+          "id": "pot1",
+          "type": "potentiometer",
+          "x": 105,
+          "y": 105,
+          "rotation": 0,
+          "props": {
+            "value": 1023,
+            "maxValue": 1023,
+            "resistance": 10000,
+            "unit": "kΩ"
+          }
+        },
+        {
+          "id": "rb",
+          "type": "resistor",
+          "x": 280,
+          "y": 260,
+          "rotation": 0,
+          "props": {
+            "value": 10,
+            "unit": "kΩ"
+          }
+        },
+        {
+          "id": "rc",
+          "type": "resistor",
+          "x": 440,
+          "y": -20,
+          "rotation": 1,
+          "props": {
+            "value": 1,
+            "unit": "kΩ"
+          }
+        },
+        {
+          "id": "vcc_base",
+          "type": "power_5v",
+          "x": 30,
+          "y": 115,
+          "rotation": 0,
+          "props": {}
+        },
+        {
+          "id": "vcc_coll",
+          "type": "battery",
+          "x": 535,
+          "y": 30,
+          "rotation": 2,
+          "props": {
+            "voltage": 4.2,
+            "capacity_mah": 5000,
+            "r_int": 0.15,
+            "label": "Li-Ion Battery"
+          }
+        },
+        {
+          "id": "gnd",
+          "type": "power_gnd",
+          "x": 450,
+          "y": 435,
+          "rotation": 0,
+          "props": {}
+        },
+        {
+          "id": "dmm_vce",
+          "type": "multimeter",
+          "x": 560,
+          "y": 220,
+          "rotation": 0,
+          "props": {
+            "mode": "V_DC",
+            "hold": false,
+            "rel": false,
+            "range_auto": true,
+            "label": "V_CE Voltmeter"
+          }
+        },
+        {
+          "id": "comp_1794581630417_t2b7z",
+          "type": "power_gnd",
+          "x": 135,
+          "y": 285,
+          "rotation": 0,
+          "props": {}
+        },
+        {
+          "id": "comp_1794581669686_vrgfg",
+          "type": "power_gnd",
+          "x": 710,
+          "y": 120,
+          "rotation": 0,
+          "props": {}
+        }
+      ],
+      "wires": [
+        {
+          "id": "wire_1794581608967_l8nrc",
+          "from": {
+            "instId": "vcc_base",
+            "pinId": "vcc"
+          },
+          "to": {
+            "instId": "pot1",
+            "pinId": "p1"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "wire_1794581608967_em3w2",
+          "from": {
+            "instId": "pot1",
+            "pinId": "p3"
+          },
+          "to": {
+            "instId": "gnd",
+            "pinId": "gnd"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "wire_1794581608967_tsy9g",
+          "from": {
+            "instId": "pot1",
+            "pinId": "p2"
+          },
+          "to": {
+            "instId": "rb",
+            "pinId": "p1"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "wire_1794581608967_6ae2k",
+          "from": {
+            "instId": "rb",
+            "pinId": "p2"
+          },
+          "to": {
+            "instId": "q1",
+            "pinId": "base"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "wire_1794581608967_r1de1",
+          "from": {
+            "instId": "vcc_coll",
+            "pinId": "pos"
+          },
+          "to": {
+            "instId": "rc",
+            "pinId": "p1"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "wire_1794581608967_t46ut",
+          "from": {
+            "instId": "rc",
+            "pinId": "p2"
+          },
+          "to": {
+            "instId": "q1",
+            "pinId": "collector"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "wire_1794581608967_c9tma",
+          "from": {
+            "instId": "q1",
+            "pinId": "emitter"
+          },
+          "to": {
+            "instId": "gnd",
+            "pinId": "gnd"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "wire_1794581608967_tha8e",
+          "from": {
+            "instId": "dmm_vce",
+            "pinId": "probe_red"
+          },
+          "to": {
+            "instId": "q1",
+            "pinId": "collector"
+          },
+          "color": null,
+          "waypoints": [
+            {
+              "x": 708,
+              "y": 424
+            },
+            {
+              "x": 498,
+              "y": 424
+            },
+            {
+              "x": 498,
+              "y": 216
+            },
+            {
+              "x": 468,
+              "y": 216
+            }
+          ],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "wire_1794581608967_3e5ye",
+          "from": {
+            "instId": "dmm_vce",
+            "pinId": "probe_com"
+          },
+          "to": {
+            "instId": "q1",
+            "pinId": "emitter"
+          },
+          "color": null,
+          "waypoints": [
+            {
+              "x": 670,
+              "y": 410
+            },
+            {
+              "x": 468,
+              "y": 410
+            }
+          ],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "wire_1794581636327_zlgaa",
+          "from": {
+            "instId": "pot1",
+            "pinId": "vcc"
+          },
+          "to": {
+            "instId": "vcc_base",
+            "pinId": "vcc"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "wire_1794581639144_c900u",
+          "from": {
+            "instId": "comp_1794581630417_t2b7z",
+            "pinId": "gnd"
+          },
+          "to": {
+            "instId": "pot1",
+            "pinId": "gnd"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "wire_1794581646286_6gvq0",
+          "from": {
+            "instId": "pot1",
+            "pinId": "wiper"
+          },
+          "to": {
+            "instId": "rb",
+            "pinId": "p1"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "wire_1794581683385_wcolx",
+          "from": {
+            "instId": "comp_1794581669686_vrgfg",
+            "pinId": "gnd"
+          },
+          "to": {
+            "instId": "vcc_coll",
+            "pinId": "neg"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        }
+      ],
+      "annotations": [],
+      "plcProgram": {
+        "mode": "code",
+        "rungs": [
+          {
+            "output": "Q0_0",
+            "elements": [
+              {
+                "type": "NO",
+                "input": "I0_0"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "files": {
+      "sketch.ino": "/*\n * BJT Transistor Characteristics Experiment\n * Common Emitter (CE) Configuration\n *\n * 1. OUTPUT CHARACTERISTICS (Ic vs Vce for different Ib):\n *    - Vary the base potentiometer to set base current Ib.\n *    - Observe collector current Ic and collector-emitter voltage Vce.\n *    - In the ACTIVE region: Ic = beta * Ib (linear current amplification).\n *    - In the SATURATION region: Vce drops to Vce(sat) (~0.2V).\n *    - In the CUTOFF region: Ib = 0 -> Ic = 0.\n *\n * 2. RIGHT-CLICK THE TRANSISTOR:\n *    - Select 'View Characteristics (IV Curves)' to open the interactive\n *      real-time IV curve tracer with dynamic Q-Point tracking!\n */\n\nvoid setup() {\n  Serial.begin(9600);\n  Serial.println(\"=== BJT Transistor Characteristics Experiment ===\");\n  Serial.println(\"Right-click the transistor to view live IV curves!\");\n}\n\nvoid loop() {\n  delay(1000);\n}\n"
+    }
+  },
+  {
     "id": "blink",
     "name": "Blink LED",
     "icon": "🔴",
@@ -33163,7 +33530,10 @@ window.EXAMPLE_SKETCHES = [
           "y": 90,
           "rotation": 0,
           "props": {
-            "voltage": 9
+            "voltage": 4.2,
+            "capacity_mah": 5000,
+            "r_int": 0.15,
+            "label": "Li-Ion Battery"
           }
         },
         {

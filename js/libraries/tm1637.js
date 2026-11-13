@@ -29,14 +29,48 @@ window.ArduinoLibs['TM1637Display'] = {
       if (!cc || !Array.isArray(cc.components)) return null;
       var comps = cc.components.filter(function (c) { return c.type === 'tm1637'; });
       if (comps.length === 0) return null;
-      // Prefer the module whose CLK pin is wired to the constructor's clk pin
+      // Match the module whose CLK and DIO pins match the constructor arguments
       var pick = null;
       for (var i = 0; i < comps.length; i++) {
-        var n = null;
-        try { n = cc._getConnectedPinNum(comps[i].id, 'CLK'); } catch (e) { n = null; }
-        if (n !== null && Number(n) === Number(clk)) { pick = comps[i]; break; }
+        var comp = comps[i];
+        var cClk = null;
+        var cDio = null;
+        try { cClk = cc._getConnectedPinNum(comp.id, 'CLK'); } catch (e) { cClk = null; }
+        try { cDio = cc._getConnectedPinNum(comp.id, 'DIO'); } catch (e) { cDio = null; }
+        if (cClk !== null && Number(cClk) === Number(clk)) {
+          if (dio !== undefined && dio !== null) {
+            if (cDio !== null && Number(cDio) === Number(dio)) {
+              pick = comp;
+              break;
+            }
+          } else {
+            pick = comp;
+            break;
+          }
+        }
       }
-      if (!pick) pick = comps[0];
+      if (!pick) return null;
+
+      // Module must have VCC and GND wires connected and powered
+      if (Array.isArray(cc.wires)) {
+        var hasVccWire = cc.wires.some(function (w) {
+          return (w.from && w.from.instId === pick.id && w.from.pinId === 'VCC') ||
+                 (w.to && w.to.instId === pick.id && w.to.pinId === 'VCC');
+        });
+        var hasGndWire = cc.wires.some(function (w) {
+          return (w.from && w.from.instId === pick.id && w.from.pinId === 'GND') ||
+                 (w.to && w.to.instId === pick.id && w.to.pinId === 'GND');
+        });
+        if (!hasVccWire || !hasGndWire) return null;
+        if (typeof cc._tracePinNet === 'function') {
+          var vccNet = cc._tracePinNet(pick.id, 'VCC');
+          var gndNet = cc._tracePinNet(pick.id, 'GND');
+          var hasVcc = vccNet && vccNet.sources && vccNet.sources.some(function (s) { return s.voltage >= 2.0; });
+          var hasGnd = gndNet && gndNet.grounds && gndNet.grounds.length > 0;
+          if (!hasVcc || !hasGnd) return null;
+        }
+      }
+
       if (!pick.runtimeState) pick.runtimeState = {};
       pick.runtimeState.digits = state.digits.slice();
       pick.runtimeState.colon = state.colon;

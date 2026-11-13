@@ -139,6 +139,7 @@ class CircuitCanvas {
     this.selected = null;
     this.selectedWire = null;
     this.selectedAnnotation = null;
+    this.selectedComponentLabel = null;
     this._hasStandalonePower = false;
 
     /* Electrical engine */
@@ -151,9 +152,10 @@ class CircuitCanvas {
     this.GRID = 5;
 
     /* Interaction state machine */
-    this.mode = 'idle';   // idle | dragging | annotationDragging | panning | wiring | placing | placingText | wiredrag
+    this.mode = 'idle';   // idle | dragging | annotationDragging | componentLabelDragging | panning | wiring | placing | placingText | wiredrag
     this.dragging = null;     // { inst, offsetX, offsetY }
     this.draggingAnnotation = null;
+    this.draggingComponentLabel = null;
     this._touchActive = false;
     this.wiringFrom = null;     // { inst, pin, wx, wy }
     this.wireMouse = null;     // { x, y } world coords
@@ -209,6 +211,7 @@ class CircuitCanvas {
   /* -------------- RENDER -------------- */
   _render() {
     const { ctx, canvas, zoom, panX, panY } = this;
+    if (!ctx || typeof ctx.setTransform !== 'function') return;
     const dpr = this._dpr || 1;
     const width = this._viewportWidth || canvas.width;
     const height = this._viewportHeight || canvas.height;
@@ -1493,21 +1496,134 @@ class CircuitCanvas {
     }
   }
 
+  _getComponentLabelPos(inst, zoom = this.zoom) {
+    const def = window.ArduinoComponents && window.ArduinoComponents.COMPONENT_DEFS
+      ? window.ArduinoComponents.COMPONENT_DEFS[inst.type]
+      : null;
+    if (!def) return null;
+    const invZ = 1 / zoom;
+    const baseX = inst.x + def.width / 2;
+    const baseY = inst.y - 8 * invZ;
+    const offsetX = Number(inst.props?.labelOffsetX) || 0;
+    const offsetY = Number(inst.props?.labelOffsetY) || 0;
+    return {
+      x: baseX + offsetX,
+      y: baseY + offsetY,
+      baseX,
+      baseY,
+      hasOffset: (offsetX !== 0 || offsetY !== 0),
+    };
+  }
+
+  _componentLabelBounds(inst, ctx = this.ctx, zoom = this.zoom) {
+    const def = window.ArduinoComponents && window.ArduinoComponents.COMPONENT_DEFS
+      ? window.ArduinoComponents.COMPONENT_DEFS[inst.type]
+      : null;
+    const labelText = inst.props?.label || '';
+    if (!def || (def.hideLabel && !labelText)) return null;
+    const displayText = labelText || def.name;
+    const pos = this._getComponentLabelPos(inst, zoom);
+    if (!pos) return null;
+
+    const invZ = 1 / zoom;
+    const fontSize = 12 * invZ;
+    const prevFont = ctx ? ctx.font : '';
+    if (ctx && typeof ctx.measureText === 'function') {
+      ctx.font = `600 ${fontSize}px Inter, sans-serif`;
+    }
+    const width = (ctx && typeof ctx.measureText === 'function')
+      ? ctx.measureText(displayText).width
+      : displayText.length * 7 * invZ;
+    if (ctx) ctx.font = prevFont;
+
+    const padX = 4 * invZ;
+    const padY = 2 * invZ;
+    const boxW = width + padX * 2;
+    const boxH = 14 * invZ + padY * 2;
+    const boxX = pos.x - boxW / 2;
+    const boxY = pos.y - 11 * invZ - padY;
+
+    return {
+      x: boxX,
+      y: boxY,
+      width: boxW,
+      height: boxH,
+      labelX: pos.x,
+      labelY: pos.y,
+      baseX: pos.baseX,
+      baseY: pos.baseY,
+      hasOffset: pos.hasOffset,
+      displayText,
+      inst,
+    };
+  }
+
+  _hitTestComponentLabel(wx, wy) {
+    if (this.zoom < 0.7) return null;
+    const invZ = 1 / this.zoom;
+    const pad = 3 * invZ;
+    for (const inst of [...this.components].reverse()) {
+      const bounds = this._componentLabelBounds(inst, this.ctx, this.zoom);
+      if (!bounds) continue;
+      if (wx >= bounds.x - pad && wx <= bounds.x + bounds.width + pad &&
+          wy >= bounds.y - pad && wy <= bounds.y + bounds.height + pad) {
+        return { inst, bounds };
+      }
+    }
+    return null;
+  }
+
   _drawOverlays(ctx, zoom = this.zoom, includeComponentLabels = false) {
     if (zoom >= 0.7 || includeComponentLabels) {
       for (const inst of this.components) {
-        const def = window.ArduinoComponents.COMPONENT_DEFS[inst.type];
+        const def = window.ArduinoComponents && window.ArduinoComponents.COMPONENT_DEFS
+          ? window.ArduinoComponents.COMPONENT_DEFS[inst.type]
+          : null;
         const labelText = inst.props?.label || '';
         if (!def || (def.hideLabel && !labelText)) continue;
         const displayText = labelText || def.name;
+        const pos = this._getComponentLabelPos(inst, zoom);
+        if (!pos) continue;
+
         ctx.save();
-        ctx.fillStyle = '#ffffff';
+        const labelColor = inst.props?.labelColor || '#ffffff';
+        ctx.fillStyle = labelColor;
         ctx.strokeStyle = '#0d1117';
         ctx.lineWidth = 3 / zoom;
         ctx.font = `600 ${12 / zoom}px Inter, sans-serif`;
         ctx.textAlign = 'center';
-        ctx.strokeText(displayText, inst.x + def.width / 2, inst.y - 8 / zoom);
-        ctx.fillText(displayText, inst.x + def.width / 2, inst.y - 8 / zoom);
+
+        // Draw leader line if label is offset from component
+        if (pos.hasOffset) {
+          ctx.save();
+          if (typeof ctx.beginPath === 'function') {
+            ctx.beginPath();
+            if (typeof ctx.setLineDash === 'function') ctx.setLineDash([3 / zoom, 3 / zoom]);
+            ctx.strokeStyle = labelColor;
+            ctx.globalAlpha = 0.45;
+            ctx.lineWidth = 1 / zoom;
+            if (typeof ctx.moveTo === 'function') ctx.moveTo(pos.baseX, pos.baseY + 4 / zoom);
+            if (typeof ctx.lineTo === 'function') ctx.lineTo(pos.x, pos.y - 2 / zoom);
+            if (typeof ctx.stroke === 'function') ctx.stroke();
+          }
+          ctx.restore();
+        }
+
+        ctx.strokeText(displayText, pos.x, pos.y);
+        ctx.fillText(displayText, pos.x, pos.y);
+
+        // Highlight selection border if component or its label is selected
+        if (inst.selected || this.selectedComponentLabel === inst) {
+          const bounds = this._componentLabelBounds(inst, ctx, zoom);
+          if (bounds && typeof ctx.strokeRect === 'function') {
+            ctx.save();
+            ctx.strokeStyle = '#58a6ff';
+            ctx.lineWidth = 1 / zoom;
+            if (typeof ctx.setLineDash === 'function') ctx.setLineDash([2 / zoom, 2 / zoom]);
+            ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
+            ctx.restore();
+          }
+        }
         ctx.restore();
       }
     }
@@ -1518,7 +1634,8 @@ class CircuitCanvas {
       ctx.font = '600 16px Inter, sans-serif';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
-      ctx.fillStyle = '#ffffff';
+      const annColor = annotation.color || '#ffffff';
+      ctx.fillStyle = annColor;
       ctx.strokeStyle = '#0d1117';
       ctx.lineWidth = 3;
       annotation.text.split(/\r?\n/).forEach((line, index) => {
@@ -2125,7 +2242,7 @@ class CircuitCanvas {
     this._notifySelectionChange();
   }
 
-  addTextAnnotation(text, worldX, worldY) {
+  addTextAnnotation(text, worldX, worldY, color = null) {
     const value = String(text || '');
     if (!value.trim()) return null;
     const annotation = {
@@ -2135,6 +2252,9 @@ class CircuitCanvas {
       y: this._snap(Number.isFinite(Number(worldY)) ? Number(worldY) : 0),
       selected: false,
     };
+    if (typeof color === 'string' && color.trim()) {
+      annotation.color = color.trim();
+    }
     this._pushHistory();
     this.annotations.push(annotation);
     this._selectAll(false);
@@ -2143,6 +2263,72 @@ class CircuitCanvas {
     this._pushHistory();
     this._onChanged();
     return annotation;
+  }
+
+  setComponentLabel(instId, label) {
+    const comp = this.components.find(c => c.id === instId);
+    if (!comp) return;
+    this._pushHistory();
+    comp.props = comp.props || {};
+    comp.props.label = String(label ?? '').trim();
+    this._pushHistory();
+    this._onChanged();
+    this._render();
+  }
+
+  setComponentLabelColor(instId, color) {
+    const comp = this.components.find(c => c.id === instId);
+    if (!comp) return;
+    this._pushHistory();
+    comp.props = comp.props || {};
+    comp.props.labelColor = (typeof color === 'string' && color.trim()) ? color.trim() : null;
+    this._pushHistory();
+    this._onChanged();
+    this._render();
+  }
+
+  setComponentLabelOffset(instId, offsetX, offsetY) {
+    const comp = this.components.find(c => c.id === instId);
+    if (!comp) return;
+    this._pushHistory();
+    comp.props = comp.props || {};
+    comp.props.labelOffsetX = Number(offsetX) || 0;
+    comp.props.labelOffsetY = Number(offsetY) || 0;
+    this._pushHistory();
+    this._onChanged();
+    this._render();
+  }
+
+  resetComponentLabelOffset(instId) {
+    const comp = this.components.find(c => c.id === instId);
+    if (!comp) return;
+    this._pushHistory();
+    comp.props = comp.props || {};
+    delete comp.props.labelOffsetX;
+    delete comp.props.labelOffsetY;
+    this._pushHistory();
+    this._onChanged();
+    this._render();
+  }
+
+  setAnnotationColor(annotationId, color) {
+    const ann = (this.annotations || []).find(a => a.id === annotationId);
+    if (!ann) return;
+    this._pushHistory();
+    ann.color = (typeof color === 'string' && color.trim()) ? color.trim() : null;
+    this._pushHistory();
+    this._onChanged();
+    this._render();
+  }
+
+  setAnnotationText(annotationId, text) {
+    const ann = (this.annotations || []).find(a => a.id === annotationId);
+    if (!ann) return;
+    this._pushHistory();
+    ann.text = String(text ?? '');
+    this._pushHistory();
+    this._onChanged();
+    this._render();
   }
 
   _placeTextAnnotation(world) {
@@ -2367,6 +2553,7 @@ class CircuitCanvas {
         this.selectedAnnotation = annotationHit;
         this.selected = null;
         this.selectedWire = null;
+        this.selectedComponentLabel = null;
         this.mode = 'annotationDragging';
         this.draggingAnnotation = {
           annotation: annotationHit,
@@ -2375,6 +2562,30 @@ class CircuitCanvas {
           moved: false,
           historyPushed: false,
         };
+        return;
+      }
+
+      const compLabelHit = this._hitTestComponentLabel(world.x, world.y);
+      if (compLabelHit) {
+        if (!e.shiftKey) this._selectAll(false);
+        compLabelHit.inst.selected = true;
+        this.selected = compLabelHit.inst;
+        this.selectedWire = null;
+        this.selectedAnnotation = null;
+        this.selectedComponentLabel = compLabelHit.inst;
+        this.mode = 'componentLabelDragging';
+        this.draggingComponentLabel = {
+          inst: compLabelHit.inst,
+          startOffsetX: Number(compLabelHit.inst.props?.labelOffsetX) || 0,
+          startOffsetY: Number(compLabelHit.inst.props?.labelOffsetY) || 0,
+          startMouseX: world.x,
+          startMouseY: world.y,
+          moved: false,
+          historyPushed: false,
+        };
+        this.canvas.style.cursor = 'move';
+        this._notifySelectionChange();
+        this._render();
         return;
       }
 
@@ -2646,6 +2857,27 @@ class CircuitCanvas {
       return;
     }
 
+    if (this.mode === 'componentLabelDragging' && this.draggingComponentLabel) {
+      const dx = world.x - this.draggingComponentLabel.startMouseX;
+      const dy = world.y - this.draggingComponentLabel.startMouseY;
+      const newOffsetX = this._snap(this.draggingComponentLabel.startOffsetX + dx);
+      const newOffsetY = this._snap(this.draggingComponentLabel.startOffsetY + dy);
+      const inst = this.draggingComponentLabel.inst;
+      inst.props = inst.props || {};
+      if (newOffsetX !== (inst.props.labelOffsetX || 0) || newOffsetY !== (inst.props.labelOffsetY || 0)) {
+        if (!this.draggingComponentLabel.historyPushed) {
+          this._pushHistory();
+          this.draggingComponentLabel.historyPushed = true;
+        }
+        inst.props.labelOffsetX = newOffsetX;
+        inst.props.labelOffsetY = newOffsetY;
+        this.draggingComponentLabel.moved = true;
+      }
+      this._lastMouse = { x: e.clientX, y: e.clientY };
+      this._hidePinTooltip();
+      return;
+    }
+
     if (this.mode === 'dragging' && this.dragging) {
       const newX = this._snap(world.x - this.dragging.offsetX);
       const newY = this._snap(world.y - this.dragging.offsetY);
@@ -2859,6 +3091,8 @@ class CircuitCanvas {
       this._hidePinTooltip();
       if (this._hitTestAnnotation(world.x, world.y)) {
         this.canvas.style.cursor = 'move';
+      } else if (this._hitTestComponentLabel(world.x, world.y)) {
+        this.canvas.style.cursor = 'move';
       } else if (comp) {
         this.canvas.style.cursor = 'move';
       } else if (wireDetail) {
@@ -2875,6 +3109,13 @@ class CircuitCanvas {
       if (this.draggingAnnotation.moved) this._pushHistory();
       this.mode = 'idle';
       this.draggingAnnotation = null;
+      this.canvas.style.cursor = '';
+    }
+    if (this.mode === 'componentLabelDragging' && this.draggingComponentLabel) {
+      if (this.draggingComponentLabel.moved) this._onChanged();
+      if (this.draggingComponentLabel.moved) this._pushHistory();
+      this.mode = 'idle';
+      this.draggingComponentLabel = null;
       this.canvas.style.cursor = '';
     }
     if (this.mode === 'dragging' && this.dragging) {
@@ -2975,6 +3216,27 @@ class CircuitCanvas {
       }
       return;
     }
+    const compLabelHit = this._hitTestComponentLabel(world.x, world.y);
+    if (compLabelHit) {
+      const inst = compLabelHit.inst;
+      const def = window.ArduinoComponents && window.ArduinoComponents.COMPONENT_DEFS
+        ? window.ArduinoComponents.COMPONENT_DEFS[inst.type]
+        : null;
+      const curText = inst.props?.label || (def ? def.name : inst.type);
+      const newText = window.prompt('Edit component label:', curText);
+      if (newText !== null) {
+        const trimmed = newText.trim();
+        inst.props = inst.props || {};
+        if (trimmed !== (inst.props.label || '')) {
+          this._pushHistory();
+          inst.props.label = trimmed;
+          this._pushHistory();
+          this._onChanged();
+          this._render();
+        }
+      }
+      return;
+    }
     const comp = this._hitTestComp(world.x, world.y);
     if (comp && window.App) {
       if (comp.type === 'dso_4ch') {
@@ -2998,6 +3260,23 @@ class CircuitCanvas {
       this.selectedAnnotation = annotation;
       this.selected = null;
       this.selectedWire = null;
+      this.selectedComponentLabel = null;
+      if (this.onContextMenu) {
+        this.onContextMenu({ type: 'annotation', id: annotation.id, annotation }, e.clientX, e.clientY);
+      }
+      return;
+    }
+    const compLabelHit = this._hitTestComponentLabel(world.x, world.y);
+    if (compLabelHit) {
+      this._selectAll(false);
+      compLabelHit.inst.selected = true;
+      this.selected = compLabelHit.inst;
+      this.selectedWire = null;
+      this.selectedAnnotation = null;
+      this.selectedComponentLabel = compLabelHit.inst;
+      if (this.onContextMenu) {
+        this.onContextMenu(compLabelHit.inst, e.clientX, e.clientY);
+      }
       return;
     }
     const comp = this._hitTestComp(world.x, world.y);
@@ -3007,10 +3286,12 @@ class CircuitCanvas {
       comp.selected = true;
       this.selected = comp;
       this.selectedWire = null;
+      this.selectedComponentLabel = null;
     } else if (wire) {
       this._selectAll(false);
       this.selectedWire = wire;
       this.selected = null;
+      this.selectedComponentLabel = null;
     }
     if (this.onContextMenu) {
       this.onContextMenu(comp || (wire ? { type: 'wire', id: wire.id, wire } : null), e.clientX, e.clientY);
@@ -3382,6 +3663,7 @@ class CircuitCanvas {
     this.components.forEach(c => c.selected = sel);
     (this.annotations || []).forEach(a => a.selected = false);
     this.selectedAnnotation = null;
+    this.selectedComponentLabel = null;
   }
 
   _getPinWorldPos(instId, pinId) {
@@ -3605,12 +3887,16 @@ class CircuitCanvas {
         routeStyle: w.routeStyle || 'orthogonal',
         bezierCtrl: w.bezierCtrl || null,
       })),
-      annotations: (this.annotations || []).map(a => ({
-        id: a.id,
-        text: a.text,
-        x: a.x,
-        y: a.y,
-      })),
+      annotations: (this.annotations || []).map(a => {
+        const item = {
+          id: a.id,
+          text: a.text,
+          x: a.x,
+          y: a.y,
+        };
+        if (a.color) item.color = a.color;
+        return item;
+      }),
     };
   }
 
@@ -3653,13 +3939,17 @@ class CircuitCanvas {
       .map((a, index) => {
         const x = Number(a.x);
         const y = Number(a.y);
-        return {
+        const ann = {
           id: String(a.id || `text_${index}_${Date.now()}`),
           text: a.text,
           x: Number.isFinite(x) ? x : 0,
           y: Number.isFinite(y) ? y : 0,
           selected: false,
         };
+        if (typeof a.color === 'string' && a.color.trim()) {
+          ann.color = a.color.trim();
+        }
+        return ann;
       });
 
     const idSet = new Set(components.map(c => c.id));
@@ -4168,6 +4458,31 @@ class CircuitCanvas {
           const hasVcc = vccNet.sources.length > 0 && vccNet.sources[0].voltage > 1.5;
           const hasGnd = gndNet.grounds.length > 0;
           inst.runtimeState.active = hasVcc && hasGnd;
+          break;
+        }
+        case 'tm1637': {
+          const hasVccWire = this.wires.some(w =>
+            (w.from && w.from.instId === inst.id && w.from.pinId === 'VCC') ||
+            (w.to && w.to.instId === inst.id && w.to.pinId === 'VCC')
+          );
+          const hasGndWire = this.wires.some(w =>
+            (w.from && w.from.instId === inst.id && w.from.pinId === 'GND') ||
+            (w.to && w.to.instId === inst.id && w.to.pinId === 'GND')
+          );
+          let powered = false;
+          if (hasVccWire && hasGndWire) {
+            const vccNet = this._tracePinNet(inst.id, 'VCC');
+            const gndNet = this._tracePinNet(inst.id, 'GND');
+            const hasVcc = vccNet.sources && vccNet.sources.some(s => s.voltage >= 2.0);
+            const hasGnd = gndNet.grounds && gndNet.grounds.length > 0;
+            powered = Boolean(hasVcc && hasGnd);
+          }
+          if (!inst.runtimeState) inst.runtimeState = {};
+          inst.runtimeState.powered = powered;
+          if (!powered) {
+            inst.runtimeState.digits = [0, 0, 0, 0];
+            inst.runtimeState.colon = 0;
+          }
           break;
         }
         case 'seg7': {

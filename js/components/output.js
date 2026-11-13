@@ -1209,7 +1209,36 @@ defComp({
     const colon = rs.colon ? 1 : 0;
     const briRaw = Number(rs.brightness);
     const bri = (rs.brightness === undefined || rs.brightness === null) ? 7 : (isFinite(briRaw) ? Math.min(Math.max(briRaw, 0), 7) : 7);
-    const inten = (rs.on === false) ? 0 : 0.25 + 0.75 * (bri / 7);
+
+    let isPowered = true;
+    if (rs.powered !== undefined) {
+      isPowered = Boolean(rs.powered);
+    } else {
+      const cc = window.CircuitCanvas;
+      if (cc && Array.isArray(cc.components) && cc.components.some(c => c.id === inst.id)) {
+        const hasVccWire = Array.isArray(cc.wires) && cc.wires.some(w =>
+          (w.from && w.from.instId === inst.id && w.from.pinId === 'VCC') ||
+          (w.to && w.to.instId === inst.id && w.to.pinId === 'VCC')
+        );
+        const hasGndWire = Array.isArray(cc.wires) && cc.wires.some(w =>
+          (w.from && w.from.instId === inst.id && w.from.pinId === 'GND') ||
+          (w.to && w.to.instId === inst.id && w.to.pinId === 'GND')
+        );
+        if (!hasVccWire || !hasGndWire) {
+          isPowered = false;
+        } else if (typeof cc._tracePinNet === 'function') {
+          const vccNet = cc._tracePinNet(inst.id, 'VCC');
+          const gndNet = cc._tracePinNet(inst.id, 'GND');
+          const hasVcc = vccNet && vccNet.sources && vccNet.sources.some(s => s.voltage >= 2.0);
+          const hasGnd = gndNet && gndNet.grounds && gndNet.grounds.length > 0;
+          if (!hasVcc || !hasGnd) {
+            isPowered = false;
+          }
+        }
+      }
+    }
+
+    const inten = (!isPowered || rs.on === false) ? 0 : 0.25 + 0.75 * (bri / 7);
     const CELLS = [24, 46, 78, 100]; // digit centres
     const CY = 28;
     const GHOST = `rgba(${rgbs(mixc(base, BLACK, 0.78))},1)`;
