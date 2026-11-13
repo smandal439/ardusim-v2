@@ -460,6 +460,11 @@
                             <path d="M0 2a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1zm1 1v10h14V3zm7 2h6v6H8z"/>
                         </svg>
                     </button>
+                    <button class="panel-icon-btn active" id="btn-toggle-current-flow" title="Toggle Animated Current / Signal Flow (Alt+C)" aria-label="Toggle Animated Current Flow" aria-pressed="true">
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M11.251.068a.5.5 0 0 1 .227.58L9.677 6.5H13a.5.5 0 0 1 .364.843l-8 8.5a.5.5 0 0 1-.842-.49L6.323 9.5H3a.5.5 0 0 1-.364-.843l8-8.5a.5.5 0 0 1 .615-.089z"/>
+                        </svg>
+                    </button>
                     <div class="hdr-divider-sm"></div> <button class="panel-icon-btn panel-toggle-btn"
                         id="btn-show-editor" title="Collapse Editor"> <svg width="13" height="13" viewBox="0 0 16 16"
                             fill="currentColor">
@@ -606,7 +611,14 @@
                     <path
                         d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8m7.5-6.923c-.67.204-1.335.82-1.887 1.855A8 8 0 0 0 1 8c0 .313.04.618.113.912.552 1.035 1.217 1.65 1.887 1.855V15a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1zm2-1a1 1 0 0 0-1 1v.937l.001.002.06.033A1 1 0 0 0 2 13v.937l-.001.002-.06.033A8 8 0 0 0 8 16a8 8 0 0 0 5.938-2.033l-.06-.033V13a1 1 0 0 0 1-1V4.661l-.001-.002-.06-.033A1 1 0 0 0 13 4V3.346l-.001-.002-.06-.033A8 8 0 0 0 8 1a8 8 0 0 0-5.938 2.033l.06.033V3a1 1 0 0 0-1 1" />
                 </svg> Web Browser </button>
-            <div class="btm-tab-spacer"></div> <button class="btm-panel-toggle" id="btn-toggle-bottom"
+            <div class="btm-tab-spacer"></div>
+            <button class="btm-panel-toggle" id="btn-popout-bottom" title="Pop out active instrument into floating window (⧉)" aria-label="Pop out active instrument">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                    <path fill-rule="evenodd" d="M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5z"/>
+                    <path fill-rule="evenodd" d="M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0v-5z"/>
+                </svg>
+            </button>
+            <button class="btm-panel-toggle" id="btn-toggle-bottom"
                 title="Toggle Bottom Panel"> <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"
                     id="bottom-toggle-icon">
                     <path
@@ -944,6 +956,12 @@
                     <div class="la-toolbar-row">
                         <button class="serial-btn la-preset-btn" id="btn-la-i2c" title="Set CH1=SCL, CH2=SDA">I2C</button>
                         <button class="serial-btn la-preset-btn" id="btn-la-uart" title="Set CH1=TX, CH2=RX">UART</button>
+                        <label class="serial-label">Decoder: <select class="serial-select" id="la-decoder" title="Inline protocol packet decoder">
+                                <option value="none" selected>None</option>
+                                <option value="uart_9600">UART (9600 8N1)</option>
+                                <option value="uart_115200">UART (115200 8N1)</option>
+                                <option value="i2c">I2C (Addr + Data)</option>
+                            </select> </label>
                         <label class="serial-label">Time/div: <select class="serial-select" id="la-timebase">
                                 <option value="0.05">50µs</option><option value="0.1">100µs</option>
                                 <option value="0.2">200µs</option><option value="0.5">500µs</option>
@@ -1015,6 +1033,22 @@
                 </div>
                 <iframe id="webbrowser-iframe" src="about:blank"></iframe>
             </div>
+        </div>
+    </div>
+    <!-- Floating Detachable Diagnostic Instrument Window (Phase 3) -->
+    <div class="instrument-popout hidden" id="instrument-popout" role="dialog" aria-label="Detached Floating Instrument">
+        <div class="popout-header" id="popout-header">
+            <div class="popout-title" id="popout-title">
+                <span class="popout-icon" id="popout-icon">📊</span>
+                <span id="popout-label">Instrument</span>
+            </div>
+            <div class="popout-actions">
+                <button type="button" class="popout-btn" id="btn-popout-dock" title="Dock back into bottom panel">⤓ Dock</button>
+                <button type="button" class="popout-btn popout-close" id="btn-popout-close" title="Close floating window" aria-label="Close">✕</button>
+            </div>
+        </div>
+        <div class="popout-body" id="popout-body">
+            <!-- Popped out pane is dynamically mounted here -->
         </div>
     </div> <!-- ------------------------ MODALS -------------------------- -->
     <div class="tour-overlay hidden" id="tour-overlay" aria-hidden="true">
