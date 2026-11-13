@@ -312,10 +312,20 @@ class ElectricalEngine {
     };
 
     const transistors = [];
+    const mosfets = [];
+    const jfets = [];
     const diodes = [];
     for (const inst of this.components) {
       if (inst.type === 'npn_transistor' || inst.type === 'pnp_transistor') {
         transistors.push(inst);
+        continue;
+      }
+      if (inst.type === 'n_mosfet' || inst.type === 'p_mosfet' || inst.type === 'n_channel_mosfet' || inst.type === 'p_channel_mosfet') {
+        mosfets.push(inst);
+        continue;
+      }
+      if (inst.type === 'n_jfet' || inst.type === 'p_jfet' || inst.type === 'n_channel_jfet' || inst.type === 'p_channel_jfet') {
+        jfets.push(inst);
         continue;
       }
       if (inst.type === 'diode_1n4007') {
@@ -469,8 +479,29 @@ class ElectricalEngine {
       'TIP32C': { beta: 40,  vbe_on: 0.70, vce_sat: 0.30, early_voltage: 60,  is_npn: false },
     };
 
-    // Non-linear resolution loop for Diodes and BJTs (Cutoff, Active, Saturation regions)
-    const maxNonlinearPasses = (diodes.length > 0 || transistors.length > 0) ? 3 : 0;
+    const MOSFET_DEFAULT_MODELS = {
+      '2N7000':  { vth: 2.1, rds_on: 1.2, kn: 0.1, lambda: 0.01, is_n: true },
+      'IRF540N': { vth: 3.0, rds_on: 0.044, kn: 5.0, lambda: 0.005, is_n: true },
+      'BS170':   { vth: 2.0, rds_on: 1.8, kn: 0.12, lambda: 0.01, is_n: true },
+      'IRFZ44N': { vth: 2.5, rds_on: 0.0175, kn: 8.0, lambda: 0.005, is_n: true },
+      'IRF9540N': { vth: -3.0, rds_on: 0.117, kn: 3.0, lambda: 0.005, is_n: false },
+      'VP2106':   { vth: -2.0, rds_on: 5.0, kn: 0.08, lambda: 0.01, is_n: false },
+      'BS250':    { vth: -2.2, rds_on: 7.0, kn: 0.05, lambda: 0.01, is_n: false },
+      'IRF5305':  { vth: -2.5, rds_on: 0.06, kn: 5.0, lambda: 0.005, is_n: false },
+    };
+
+    const JFET_DEFAULT_MODELS = {
+      '2N5457': { vp: -3.0, idss: 0.003, rds0: 200, lambda: 0.01, is_n: true },
+      '2N3819': { vp: -4.0, idss: 0.010, rds0: 100, lambda: 0.01, is_n: true },
+      'J201':   { vp: -0.8, idss: 0.0006, rds0: 400, lambda: 0.01, is_n: true },
+      'BF245A': { vp: -1.5, idss: 0.004, rds0: 150, lambda: 0.01, is_n: true },
+      '2N5460': { vp: 2.5,  idss: 0.0025, rds0: 250, lambda: 0.01, is_n: false },
+      '2N3820': { vp: 3.5,  idss: 0.008,  rds0: 120, lambda: 0.01, is_n: false },
+      'J174':   { vp: 3.0,  idss: 0.030,  rds0: 30,  lambda: 0.01, is_n: false },
+    };
+
+    // Non-linear resolution loop for Diodes, BJTs, MOSFETs and JFETs
+    const maxNonlinearPasses = (diodes.length > 0 || transistors.length > 0 || mosfets.length > 0 || jfets.length > 0) ? 3 : 0;
     for (let pass = 0; pass < maxNonlinearPasses; pass++) {
       let anyChange = false;
 
@@ -602,6 +633,248 @@ class ElectricalEngine {
         inst.runtimeState.early_voltage = va;
       }
 
+      // 4c. MOSFET Modeling (Cutoff, Linear/Ohmic, Saturation, and Body Diode)
+      for (const inst of mosfets) {
+        const isN = (inst.type === 'n_mosfet' || inst.type === 'n_channel_mosfet');
+        const gate = this.getNetForPin(inst.id, 'gate');
+        const drain = this.getNetForPin(inst.id, 'drain');
+        const source = this.getNetForPin(inst.id, 'source');
+
+        const tagDS = 'mos_ds_' + inst.id;
+        const tagBody = 'mos_body_' + inst.id;
+        removeEdgesByTag(tagDS);
+        removeEdgesByTag(tagBody);
+
+        inst.runtimeState = inst.runtimeState || {};
+        const defaultModel = isN ? '2N7000' : 'IRF9540N';
+        const model = inst.props?.model || defaultModel;
+        const preset = (window.MOSFET_MODELS && window.MOSFET_MODELS[model])
+          || MOSFET_DEFAULT_MODELS[model] || {};
+
+        const vth = Number(inst.props?.vth ?? preset.vth ?? (isN ? 2.1 : -3.0));
+        const rds_on = Math.max(0.005, Number(inst.props?.rds_on ?? preset.rds_on ?? (isN ? 1.2 : 0.117)));
+        const kn = Math.max(0.001, Number(inst.props?.kn ?? preset.kn ?? (isN ? 0.1 : 3.0)));
+        const lambda = Math.max(0, Number(inst.props?.lambda ?? preset.lambda ?? 0.01));
+
+        const selfTags = [tagDS, tagBody];
+        const gTh = getNetThevenin(gate, selfTags);
+        const dTh = getNetThevenin(drain, selfTags);
+        const sTh = getNetThevenin(source, selfTags);
+
+        let region = 'cutoff';
+        let id = 0;
+        let rds = 1e7;
+        let bodyDiodeConducting = false;
+
+        const vG = gTh.voc;
+        const vD = dTh.voc;
+        const vS = sTh.voc;
+        const rExt = (dTh.rth || 0) + (sTh.rth || 0);
+
+        if (isN) {
+          // --- N-Channel Enhancement MOSFET ---
+          // Body diode from Source (anode) to Drain (cathode)
+          if (vS > vD + 0.65 && source && drain) {
+            bodyDiodeConducting = true;
+            addEdge(source, drain, 10, tagBody);
+          }
+
+          const vgs = vG - vS;
+          const vov = vgs - vth;
+          const vdsExt = Math.max(0, vD - vS);
+
+          if (vov > 0 && drain && source) {
+            const idSat = kn * (vov * vov) * (1 + lambda * vdsExt);
+            const idMax = vdsExt / Math.max(0.01, rExt + rds_on);
+
+            if (idSat >= idMax || vdsExt < vov) {
+              // Linear / Ohmic region (switch ON)
+              region = 'linear';
+              const rChannel = 1 / Math.max(1e-4, 2 * kn * vov);
+              rds = Math.max(rds_on, rds_on + rChannel);
+              id = vdsExt / Math.max(0.01, rExt + rds);
+            } else {
+              // Saturation region (pinch-off, amplifier)
+              region = 'saturation';
+              id = idSat;
+              const vdsDrop = Math.max(vov, vdsExt - id * rExt);
+              rds = Math.max(rds_on, vdsDrop / Math.max(1e-6, id));
+            }
+            addEdge(drain, source, rds, tagDS);
+          }
+        } else {
+          // --- P-Channel Enhancement MOSFET ---
+          // Body diode from Drain (anode) to Source (cathode)
+          if (vD > vS + 0.65 && drain && source) {
+            bodyDiodeConducting = true;
+            addEdge(drain, source, 10, tagBody);
+          }
+
+          const vsg = vS - vG;
+          const absVth = Math.abs(vth);
+          const vov = vsg - absVth;
+          const vsdExt = Math.max(0, vS - vD);
+
+          if (vov > 0 && drain && source) {
+            const idSat = kn * (vov * vov) * (1 + lambda * vsdExt);
+            const idMax = vsdExt / Math.max(0.01, rExt + rds_on);
+
+            if (idSat >= idMax || vsdExt < vov) {
+              // Linear / Ohmic region
+              region = 'linear';
+              const rChannel = 1 / Math.max(1e-4, 2 * kn * vov);
+              rds = Math.max(rds_on, rds_on + rChannel);
+              id = vsdExt / Math.max(0.01, rExt + rds);
+            } else {
+              // Saturation region
+              region = 'saturation';
+              id = idSat;
+              const vsdDrop = Math.max(vov, vsdExt - id * rExt);
+              rds = Math.max(rds_on, vsdDrop / Math.max(1e-6, id));
+            }
+            addEdge(source, drain, rds, tagDS);
+          }
+        }
+
+        const conducting = (region !== 'cutoff') || bodyDiodeConducting;
+        if (inst.runtimeState.conducting !== conducting || inst.runtimeState.region !== region) {
+          anyChange = true;
+        }
+
+        inst.runtimeState.conducting = conducting;
+        inst.runtimeState.region = region;
+        inst.runtimeState.id = id;
+        inst.runtimeState.is_current = id;
+        inst.runtimeState.ig = 0; // Insulated Gate
+        inst.runtimeState.rds = rds;
+        inst.runtimeState.model = model;
+        inst.runtimeState.vth = vth;
+        inst.runtimeState.rds_on = rds_on;
+        inst.runtimeState.kn = kn;
+        inst.runtimeState.body_diode = bodyDiodeConducting;
+      }
+
+      // 4d. JFET Modeling (Depletion mode: normally ON, cutoff when gate reverse-biased past Vp)
+      for (const inst of jfets) {
+        const isN = (inst.type === 'n_jfet' || inst.type === 'n_channel_jfet');
+        const gate = this.getNetForPin(inst.id, 'gate');
+        const drain = this.getNetForPin(inst.id, 'drain');
+        const source = this.getNetForPin(inst.id, 'source');
+
+        const tagDS = 'jfet_ds_' + inst.id;
+        const tagGate = 'jfet_gate_' + inst.id;
+        removeEdgesByTag(tagDS);
+        removeEdgesByTag(tagGate);
+
+        inst.runtimeState = inst.runtimeState || {};
+        const defaultModel = isN ? '2N5457' : '2N5460';
+        const model = inst.props?.model || defaultModel;
+        const preset = (window.JFET_MODELS && window.JFET_MODELS[model])
+          || JFET_DEFAULT_MODELS[model] || {};
+
+        const vp = Number(inst.props?.vp ?? preset.vp ?? (isN ? -3.0 : 2.5));
+        const idss = Math.max(1e-5, Number(inst.props?.idss ?? preset.idss ?? (isN ? 0.003 : 0.0025)));
+        const rds0 = Math.max(10, Number(inst.props?.rds0 ?? preset.rds0 ?? (isN ? 200 : 250)));
+        const lambda = Math.max(0, Number(inst.props?.lambda ?? preset.lambda ?? 0.01));
+
+        const selfTags = [tagDS, tagGate];
+        const gTh = getNetThevenin(gate, selfTags);
+        const dTh = getNetThevenin(drain, selfTags);
+        const sTh = getNetThevenin(source, selfTags);
+
+        let region = 'cutoff';
+        let id = 0;
+        let ig = 0;
+        let rds = 1e7;
+
+        const vG = gTh.voc;
+        const vD = dTh.voc;
+        const vS = sTh.voc;
+        const rExt = (dTh.rth || 0) + (sTh.rth || 0);
+
+        if (isN) {
+          // --- N-Channel JFET (Vp < 0, normally ON at Vgs = 0) ---
+          // Gate forward-biased diode clamp at ~0.65V
+          if (vG > vS + 0.65 && gate && source) {
+            ig = Math.max(0, (vG - (vS + 0.65)) / ((gTh.rth || 0) + 25));
+            addEdge(gate, source, 25, tagGate);
+          }
+
+          const vgs = Math.min(0.65, vG - vS);
+          const vdsExt = Math.max(0, vD - vS);
+
+          if (vgs > vp && drain && source) {
+            const u = Math.max(0, 1 - vgs / vp); // headroom from pinch-off: 0 at Vp, 1 at 0V
+            const vdsSat = -vp * u; // pinch-off drain voltage
+            const idSat = idss * (u * u) * (1 + lambda * vdsExt);
+            const rChannel = rds0 / Math.max(0.01, u);
+            const idMax = vdsExt / Math.max(0.01, rExt + rChannel);
+
+            if (idSat >= idMax || vdsExt < vdsSat) {
+              // Ohmic region
+              region = 'ohmic';
+              rds = Math.max(rds0, rChannel);
+              id = vdsExt / Math.max(0.01, rExt + rds);
+            } else {
+              // Saturation region (pinch-off, current saturation)
+              region = 'saturation';
+              id = idSat;
+              const vdsDrop = Math.max(vdsSat, vdsExt - id * rExt);
+              rds = Math.max(rds0, vdsDrop / Math.max(1e-6, id));
+            }
+            addEdge(drain, source, rds, tagDS);
+          }
+        } else {
+          // --- P-Channel JFET (Vp > 0, normally ON at Vgs = 0) ---
+          // Gate forward-biased clamp if Source > Gate + 0.65V
+          if (vS > vG + 0.65 && gate && source) {
+            ig = Math.max(0, (vS - (vG + 0.65)) / ((gTh.rth || 0) + 25));
+            addEdge(source, gate, 25, tagGate);
+          }
+
+          const vgs = Math.max(-0.65, vG - vS);
+          const vsdExt = Math.max(0, vS - vD);
+
+          if (vgs < vp && drain && source) {
+            const u = Math.max(0, 1 - vgs / vp);
+            const vsdSat = vp * u;
+            const idSat = idss * (u * u) * (1 + lambda * vsdExt);
+            const rChannel = rds0 / Math.max(0.01, u);
+            const idMax = vsdExt / Math.max(0.01, rExt + rChannel);
+
+            if (idSat >= idMax || vsdExt < vsdSat) {
+              // Ohmic region
+              region = 'ohmic';
+              rds = Math.max(rds0, rChannel);
+              id = vsdExt / Math.max(0.01, rExt + rds);
+            } else {
+              // Saturation region
+              region = 'saturation';
+              id = idSat;
+              const vsdDrop = Math.max(vsdSat, vsdExt - id * rExt);
+              rds = Math.max(rds0, vsdDrop / Math.max(1e-6, id));
+            }
+            addEdge(source, drain, rds, tagDS);
+          }
+        }
+
+        const conducting = region !== 'cutoff';
+        if (inst.runtimeState.conducting !== conducting || inst.runtimeState.region !== region) {
+          anyChange = true;
+        }
+
+        inst.runtimeState.conducting = conducting;
+        inst.runtimeState.region = region;
+        inst.runtimeState.id = id;
+        inst.runtimeState.is_current = id + ig;
+        inst.runtimeState.ig = ig;
+        inst.runtimeState.rds = rds;
+        inst.runtimeState.model = model;
+        inst.runtimeState.vp = vp;
+        inst.runtimeState.idss = idss;
+        inst.runtimeState.rds0 = rds0;
+      }
+
       relaxVoltages();
       if (!anyChange && pass > 0) break;
     }
@@ -618,6 +891,34 @@ class ElectricalEngine {
       rs.vcb = Math.abs(collectorV - baseV);
       rs.beta_actual = (rs.ib && rs.ib > 1e-7) ? (rs.ic / rs.ib) : (rs.beta || 100);
       rs.power = (rs.vce || 0) * (rs.ic || 0) + (rs.vbe || 0) * (rs.ib || 0);
+    }
+
+    // Populate post-solve voltages and power dissipation for all MOSFETs
+    for (const inst of mosfets) {
+      const rs = inst.runtimeState || {};
+      const gateV = this.getNetForPin(inst.id, 'gate')?.voltage ?? 0;
+      const drainV = this.getNetForPin(inst.id, 'drain')?.voltage ?? 0;
+      const sourceV = this.getNetForPin(inst.id, 'source')?.voltage ?? 0;
+
+      rs.vgs = gateV - sourceV;
+      rs.vds = drainV - sourceV;
+      rs.vsg = sourceV - gateV;
+      rs.vsd = sourceV - drainV;
+      rs.power = Math.abs(rs.vds * (rs.id || 0));
+    }
+
+    // Populate post-solve voltages and power dissipation for all JFETs
+    for (const inst of jfets) {
+      const rs = inst.runtimeState || {};
+      const gateV = this.getNetForPin(inst.id, 'gate')?.voltage ?? 0;
+      const drainV = this.getNetForPin(inst.id, 'drain')?.voltage ?? 0;
+      const sourceV = this.getNetForPin(inst.id, 'source')?.voltage ?? 0;
+
+      rs.vgs = gateV - sourceV;
+      rs.vds = drainV - sourceV;
+      rs.vsg = sourceV - gateV;
+      rs.vsd = sourceV - drainV;
+      rs.power = Math.abs(rs.vds * (rs.id || 0));
     }
 
     // Store adjacency for getSourceAtPin/hasGroundAtPin traversal
@@ -1099,6 +1400,10 @@ class ElectricalEngine {
         && inst.runtimeState?.conducting) {
         addEdge(key('collector'), key('emitter'), Math.max(5, inst.runtimeState.rce || 10));
         addEdge(key('base'), key('emitter'), Math.max(10, inst.runtimeState.rbe || 50));
+      } else if ((inst.type === 'n_mosfet' || inst.type === 'p_mosfet' || inst.type === 'n_channel_mosfet' || inst.type === 'p_channel_mosfet'
+        || inst.type === 'n_jfet' || inst.type === 'p_jfet' || inst.type === 'n_channel_jfet' || inst.type === 'p_channel_jfet')
+        && inst.runtimeState?.conducting) {
+        addEdge(key('drain'), key('source'), Math.max(0.01, inst.runtimeState.rds || 10));
       } else if (inst.type === 'diode_1n4007' && inst.runtimeState?.conducting) {
         addEdge(key('anode'), key('cathode'), 10);
       } else if (inst.type === 'bulb_12v') {

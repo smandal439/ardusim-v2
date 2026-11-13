@@ -3508,6 +3508,29 @@ class CircuitCanvas {
           const ie = rs.ie || 0;
           addRow('Emitter Current Ie', ie >= 1 ? ie.toFixed(2) + ' A' : (ie * 1e3).toFixed(2) + ' mA');
         }
+      } else if (inst.type === 'n_mosfet' || inst.type === 'p_mosfet' || inst.type === 'n_channel_mosfet' || inst.type === 'p_channel_mosfet'
+        || inst.type === 'n_jfet' || inst.type === 'p_jfet' || inst.type === 'n_channel_jfet' || inst.type === 'p_channel_jfet') {
+        const rs = inst.runtimeState || {};
+        const reg = (rs.region || (rs.conducting ? 'linear' : 'cutoff')).toUpperCase();
+        const regCls = (reg === 'LINEAR' || reg === 'OHMIC' || reg === 'SATURATION') ? 'pin-tip-high' : 'pin-tip-low';
+        addRow('Operating Region', reg, regCls);
+        const engine = this.engine;
+        if (engine) {
+          const v = engine.getVoltageAtPin(inst.id, pin.id);
+          if (v != null) addRow('Pin Voltage', v.toFixed(3) + ' V');
+        }
+        if (rs.vgs != null) addRow('Vgs', rs.vgs.toFixed(3) + ' V');
+        if (rs.vds != null) addRow('Vds', rs.vds.toFixed(3) + ' V');
+        if (pin.id === 'gate') {
+          const ig = rs.ig || 0;
+          addRow('Gate Current Ig', Math.abs(ig) >= 1e-3 ? (ig * 1e3).toFixed(2) + ' mA' : (ig * 1e6).toFixed(1) + ' µA');
+        } else if (pin.id === 'drain') {
+          const id = rs.id || 0;
+          addRow('Drain Current Id', id >= 1 ? id.toFixed(2) + ' A' : (id * 1e3).toFixed(2) + ' mA');
+        } else if (pin.id === 'source') {
+          const isCurr = rs.is_current ?? rs.id ?? 0;
+          addRow('Source Current Is', isCurr >= 1 ? isCurr.toFixed(2) + ' A' : (isCurr * 1e3).toFixed(2) + ' mA');
+        }
       } else if (inst.type === 'potentiometer') {
         const rs = inst.runtimeState || {};
         const maxVal = Math.max(1, Number(inst.props?.maxValue) || 1023);
@@ -5947,6 +5970,17 @@ class CircuitCanvas {
           if (cIn && !bIn && !eIn) sum += (rs.ic || 0);
           else if (bIn && !cIn && !eIn) sum += (rs.ib || 0);
           else if (eIn && !cIn && !bIn) sum += (rs.ie || 0);
+          continue;
+        }
+        if (comp.type === 'n_mosfet' || comp.type === 'p_mosfet' || comp.type === 'n_channel_mosfet' || comp.type === 'p_channel_mosfet'
+          || comp.type === 'n_jfet' || comp.type === 'p_jfet' || comp.type === 'n_channel_jfet' || comp.type === 'p_channel_jfet') {
+          const rs = comp.runtimeState || {};
+          const dIn = group.has(`${comp.id}:drain`);
+          const sIn = group.has(`${comp.id}:source`);
+          const gIn = group.has(`${comp.id}:gate`);
+          if (dIn && !sIn && !gIn) sum += (rs.id || 0);
+          else if (sIn && !dIn && !gIn) sum += (rs.is_current ?? rs.id ?? 0);
+          else if (gIn && !dIn && !sIn) sum += (rs.ig || 0);
           continue;
         }
         if (comp.type === 'potentiometer') {

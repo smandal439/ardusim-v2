@@ -3880,7 +3880,7 @@ _newProject() {
           <p class="props-desc-text">${esc(g.longDesc || def?.desc || '')}</p>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px;">
             <button type="button" class="gh-btn gh-btn-ghost gh-btn-sm props-ref-btn">Open full reference ←</button>
-            ${(comp.type === 'npn_transistor' || comp.type === 'pnp_transistor') ? `<button type="button" class="gh-btn gh-btn-sm props-curves-btn" style="background:rgba(56,189,248,0.15);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);font-weight:600;">📈 View Characteristics (IV Curves)</button>` : ''}
+            ${(comp.type === 'npn_transistor' || comp.type === 'pnp_transistor' || comp.type === 'n_mosfet' || comp.type === 'p_mosfet' || comp.type === 'n_channel_mosfet' || comp.type === 'p_channel_mosfet' || comp.type === 'n_jfet' || comp.type === 'p_jfet' || comp.type === 'n_channel_jfet' || comp.type === 'p_channel_jfet') ? `<button type="button" class="gh-btn gh-btn-sm props-curves-btn" style="background:rgba(56,189,248,0.15);color:#38bdf8;border:1px solid rgba(56,189,248,0.3);font-weight:600;">📈 View Characteristics (IV Curves)</button>` : ''}
           </div>
         </div>
       </div>
