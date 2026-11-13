@@ -41,6 +41,9 @@ class LogicAnalyzer {
     this._cursorBx = null;
     this._cursorEpoch = null; // frozen window end while cursors are active (ms)
 
+    /* Protocol Decoder (Phase 3) */
+    this.decoder = 'none'; // 'none' | 'uart_9600' | 'uart_115200' | 'i2c'
+
     /* Colors */
     this.BG_COLOR = '#0a0e14';
     this.GRID_COLOR = 'rgba(255,255,255,0.06)';
@@ -474,6 +477,11 @@ class LogicAnalyzer {
       // Draw waveform
       this._drawChannelWaveform(ctx, ch, d, labelW, plotW, y0, channelH, startT, endT, color);
     });
+
+    // Draw protocol decoder overlays (Phase 3)
+    if (this.decoder && this.decoder !== 'none') {
+      this._drawProtocolOverlays(ctx, labelW, plotW, H, startT, endT, windowMs, activeChannels);
+    }
 
     // Draw cursors
     this._drawCursors(ctx, labelW, plotW, H, startT, endT, windowMs, activeChannels);
@@ -1010,6 +1018,242 @@ class LogicAnalyzer {
     const filename = `logic_analyzer_${Date.now()}.csv`;
     this._downloadFile(csv, filename, 'text/csv');
     return csv;
+  }
+
+  /* ── Protocol Decoders (Phase 3) ── */
+  setDecoder(type) {
+    this.decoder = type || 'none';
+    const sel = typeof document !== 'undefined' ? document.getElementById('la-decoder') : null;
+    if (sel && sel.value !== this.decoder) {
+      sel.value = this.decoder;
+    }
+  }
+
+  _decodeUART(samples, baudRate = 9600) {
+    if (!samples || samples.length < 2) return [];
+    const bitPeriod = 1000 / baudRate; // ms
+    const packets = [];
+
+    const getValAt = (t) => {
+      let val = 1;
+      for (let i = 0; i < samples.length; i++) {
+        if (samples[i].t > t) break;
+        val = samples[i].v ? 1 : 0;
+      }
+      return val;
+    };
+
+    let idx = 0;
+    while (idx < samples.length - 1) {
+      const curr = samples[idx];
+      const next = samples[idx + 1];
+
+      // Detect falling edge from 1 to 0 (Start bit)
+      if (curr.v === 1 && next.v === 0) {
+        const tStart = next.t;
+        // Verify start bit at center
+        if (getValAt(tStart + bitPeriod * 0.5) === 0) {
+          let byteVal = 0;
+          for (let b = 0; b < 8; b++) {
+            const bit = getValAt(tStart + bitPeriod * (1.5 + b));
+            byteVal |= (bit << b);
+          }
+          const stopBit = getValAt(tStart + bitPeriod * 9.5);
+          const tEnd = tStart + bitPeriod * 10;
+          const isPrintable = byteVal >= 32 && byteVal <= 126;
+          const hex = '0x' + byteVal.toString(16).toUpperCase().padStart(2, '0');
+          const char = isPrintable ? String.fromCharCode(byteVal) : '.';
+          const label = isPrintable ? `'${char}' (${hex})` : hex;
+
+          packets.push({
+            startT: tStart,
+            endT: tEnd,
+            byteVal,
+            char,
+            hex,
+            label,
+            valid: stopBit === 1,
+          });
+
+          // Advance idx to samples after tEnd
+          while (idx < samples.length && samples[idx].t < tEnd) {
+            idx++;
+          }
+          continue;
+        }
+      }
+      idx++;
+    }
+
+    return packets;
+  }
+
+  _decodeI2C(sclSamples, sdaSamples) {
+    if (!sclSamples || !sdaSamples || sclSamples.length < 2 || sdaSamples.length < 2) return [];
+    const packets = [];
+
+    const getValAt = (arr, t) => {
+      let val = 1;
+      for (let i = 0; i < arr.length; i++) {
+        if (arr[i].t > t) break;
+        val = arr[i].v ? 1 : 0;
+      }
+      return val;
+    };
+
+    let byteBits = [];
+    let byteStartT = 0;
+    let isFirstByte = true;
+
+    // Detect START conditions (SDA falling while SCL is HIGH)
+    for (let i = 0; i < sdaSamples.length - 1; i++) {
+      const sdaCurr = sdaSamples[i];
+      const sdaNext = sdaSamples[i + 1];
+      if (sdaCurr.v === 1 && sdaNext.v === 0) {
+        const sclVal = getValAt(sclSamples, sdaNext.t);
+        if (sclVal === 1) {
+          isFirstByte = true;
+          byteBits = [];
+          byteStartT = sdaNext.t;
+        }
+      }
+    }
+
+    // Process SCL rising edges to sample SDA data bits
+    for (let i = 0; i < sclSamples.length - 1; i++) {
+      const sclCurr = sclSamples[i];
+      const sclNext = sclSamples[i + 1];
+      if (sclCurr.v === 0 && sclNext.v === 1) {
+        const t = sclNext.t;
+        const bit = getValAt(sdaSamples, t);
+
+        if (byteBits.length === 0) byteStartT = t;
+        byteBits.push(bit);
+
+        if (byteBits.length === 9) {
+          // 8 data bits + 1 ACK bit
+          let byteVal = 0;
+          for (let b = 0; b < 8; b++) {
+            byteVal = (byteVal << 1) | byteBits[b];
+          }
+          const ack = byteBits[8] === 0;
+
+          if (isFirstByte) {
+            const addr = byteVal >> 1;
+            const rw = (byteVal & 1) ? 'R' : 'W';
+            const hex = '0x' + addr.toString(16).toUpperCase().padStart(2, '0');
+            packets.push({
+              startT: byteStartT,
+              endT: t,
+              type: 'addr',
+              addr,
+              rw,
+              hex,
+              ack,
+              label: `Addr: ${hex} ${rw} [${ack ? 'ACK' : 'NACK'}]`,
+            });
+            isFirstByte = false;
+          } else {
+            const hex = '0x' + byteVal.toString(16).toUpperCase().padStart(2, '0');
+            packets.push({
+              startT: byteStartT,
+              endT: t,
+              type: 'data',
+              byteVal,
+              hex,
+              ack,
+              label: `Data: ${hex} [${ack ? 'ACK' : 'NACK'}]`,
+            });
+          }
+          byteBits = [];
+        }
+      }
+    }
+
+    return packets;
+  }
+
+  _drawProtocolOverlays(ctx, labelW, plotW, H, startT, endT, windowMs, activeChannels) {
+    if (windowMs <= 0 || !activeChannels || activeChannels.length === 0) return;
+
+    if (this.decoder.startsWith('uart')) {
+      const baud = this.decoder === 'uart_115200' ? 115200 : 9600;
+      const targetCh = activeChannels.find(ch => ch.pin && (ch.pin.includes('TX') || ch.pin.includes('RX'))) || activeChannels[0];
+      const chIdx = activeChannels.indexOf(targetCh);
+      if (chIdx === -1) return;
+
+      const channelH = Math.floor(H / activeChannels.length);
+      const y0 = chIdx * channelH;
+      const packets = this._decodeUART(this.data[targetCh.pin] || [], baud);
+
+      for (const pkt of packets) {
+        if (pkt.endT < startT || pkt.startT > endT) continue;
+        const x1 = Math.max(labelW, labelW + ((pkt.startT - startT) / windowMs) * plotW);
+        const x2 = Math.min(labelW + plotW, labelW + ((pkt.endT - startT) / windowMs) * plotW);
+        const w = Math.max(18, x2 - x1);
+        const yPill = y0 + channelH * 0.12;
+        const hPill = channelH * 0.28;
+
+        ctx.save();
+        ctx.fillStyle = pkt.valid ? 'rgba(0, 229, 255, 0.25)' : 'rgba(244, 67, 54, 0.35)';
+        ctx.strokeStyle = pkt.valid ? '#00e5ff' : '#f44336';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        if (typeof ctx.roundRect === 'function') {
+          ctx.roundRect(x1, yPill, w, hPill, 3);
+        } else {
+          ctx.rect(x1, yPill, w, hPill);
+        }
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = pkt.valid ? '#e6edf3' : '#ffcdd2';
+        ctx.font = 'bold 9px JetBrains Mono, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(pkt.label, x1 + w / 2, yPill + hPill / 2);
+        ctx.restore();
+      }
+    } else if (this.decoder === 'i2c') {
+      const sclCh = activeChannels.find(ch => ch.pin && ch.pin.includes('SCL')) || activeChannels[0];
+      const sdaCh = activeChannels.find(ch => ch.pin && ch.pin.includes('SDA')) || activeChannels[1];
+      if (!sclCh || !sdaCh) return;
+
+      const chIdx = activeChannels.indexOf(sdaCh);
+      const channelH = Math.floor(H / activeChannels.length);
+      const y0 = (chIdx !== -1 ? chIdx : 0) * channelH;
+      const packets = this._decodeI2C(this.data[sclCh.pin] || [], this.data[sdaCh.pin] || []);
+
+      for (const pkt of packets) {
+        if (pkt.endT < startT || pkt.startT > endT) continue;
+        const x1 = Math.max(labelW, labelW + ((pkt.startT - startT) / windowMs) * plotW);
+        const x2 = Math.min(labelW + plotW, labelW + ((pkt.endT - startT) / windowMs) * plotW);
+        const w = Math.max(20, x2 - x1);
+        const yPill = y0 + channelH * 0.12;
+        const hPill = channelH * 0.28;
+
+        const isAddr = pkt.type === 'addr';
+        ctx.save();
+        ctx.fillStyle = isAddr ? 'rgba(255, 152, 0, 0.28)' : 'rgba(76, 175, 80, 0.28)';
+        ctx.strokeStyle = isAddr ? '#ff9800' : '#4caf50';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        if (typeof ctx.roundRect === 'function') {
+          ctx.roundRect(x1, yPill, w, hPill, 3);
+        } else {
+          ctx.rect(x1, yPill, w, hPill);
+        }
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 9px JetBrains Mono, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(pkt.label, x1 + w / 2, yPill + hPill / 2);
+        ctx.restore();
+      }
+    }
   }
 }
 

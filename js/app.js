@@ -293,6 +293,8 @@ class App {
     canvasFullscreenBtn?.addEventListener('click', () => this._toggleCanvasFullscreen());
     const toggleMinimapBtn = get('btn-toggle-minimap');
     toggleMinimapBtn?.addEventListener('click', () => this.canvas?.toggleMinimap());
+    const toggleCurrentFlowBtn = get('btn-toggle-current-flow');
+    toggleCurrentFlowBtn?.addEventListener('click', () => this.canvas?.toggleCurrentAnimation());
     const editorFullscreenBtn = get('btn-editor-fullscreen');
     editorFullscreenBtn?.addEventListener('click', () => this._toggleEditorFullscreen());
     undoBtn?.addEventListener('click', () => this.canvas?.undo());
@@ -359,6 +361,15 @@ class App {
       if (statusEl) statusEl.textContent = 'UART preset: TX + RX';
       setTimeout(() => { if (statusEl) statusEl.textContent = 'Running'; }, 1500);
     });
+    document.getElementById('la-decoder')?.addEventListener('change', (e) => {
+      this.la?.setDecoder(e.target.value);
+    });
+
+    // Detachable Floating Instrument controls (Phase 3)
+    document.getElementById('btn-popout-bottom')?.addEventListener('click', () => this.popoutInstrument());
+    document.getElementById('btn-popout-dock')?.addEventListener('click', () => this.dockInstrument());
+    document.getElementById('btn-popout-close')?.addEventListener('click', () => this.dockInstrument());
+    this._initInstrumentPopoutDrag();
 
     // Modal close
     document.querySelectorAll('.modal-close').forEach(btn => btn.addEventListener('click', () => {
@@ -3400,11 +3411,128 @@ _newProject() {
     if (target === 'registers') { this._buildRegisterViewer(); this._updateRegisters(); }
     if (target === 'memory') { this._buildMemoryViewer(); this._updateMemory(); }
     if (target === 'oscilloscope' && this.osc) {
-      this.osc.refreshProbeOptions(document.getElementById('osc-ch1'), document.getElementById('osc-ch2'));
+      this.osc.refreshProbeOptions?.(document.getElementById('osc-ch1'), document.getElementById('osc-ch2'));
     }
     if (target === 'logic-analyzer' && this.la) {
-      this.la.refreshProbeOptions();
+      this.la.refreshProbeOptions?.();
     }
+  }
+
+  /* ---------------------- DETACHABLE FLOATING INSTRUMENT (Phase 3) ---------------------- */
+  popoutInstrument(tabName = null) {
+    const popout = document.getElementById('instrument-popout');
+    const popoutBody = document.getElementById('popout-body');
+    const popoutLabel = document.getElementById('popout-label');
+    const popoutIcon = document.getElementById('popout-icon');
+    const dockContainer = document.getElementById('btm-panel-body');
+    if (!popout || !popoutBody || !dockContainer) return;
+
+    if (this._poppedInstrument) {
+      this.dockInstrument();
+    }
+
+    let targetTab = tabName;
+    if (!targetTab) {
+      const activeBtn = document.querySelector('.btm-tab.active');
+      targetTab = activeBtn ? activeBtn.dataset.tab : 'serial';
+    }
+
+    const pane = document.getElementById(`pane-${targetTab}`);
+    if (!pane) return;
+
+    const tabTitles = {
+      serial: { label: 'Serial Monitor', icon: '⚡' },
+      output: { label: 'Output Log', icon: '📝' },
+      oscilloscope: { label: 'Oscilloscope', icon: '📈' },
+      'logic-analyzer': { label: 'Logic Analyzer', icon: '📊' },
+      plotter: { label: 'Serial Plotter', icon: '📉' },
+      pins: { label: 'Pin Monitor', icon: '🔌' },
+      registers: { label: 'Registers Viewer', icon: '🔢' },
+      memory: { label: 'Memory Dump', icon: '💾' },
+      webbrowser: { label: 'Web Browser', icon: '🌐' },
+    };
+
+    const meta = tabTitles[targetTab] || { label: targetTab, icon: '📊' };
+    if (popoutLabel) popoutLabel.textContent = meta.label;
+    if (popoutIcon) popoutIcon.textContent = meta.icon;
+
+    this._poppedInstrument = {
+      tab: targetTab,
+      pane,
+      dockContainer,
+    };
+
+    popoutBody.appendChild(pane);
+    pane.classList.add('active');
+    popout.classList.remove('hidden');
+
+    setTimeout(() => {
+      if (targetTab === 'oscilloscope') this.osc?._resize?.();
+      if (targetTab === 'logic-analyzer') this.la?._resize?.();
+      if (targetTab === 'plotter') this.plotter?._resize?.();
+    }, 50);
+  }
+
+  dockInstrument() {
+    if (!this._poppedInstrument) return;
+    const { pane, dockContainer, tab } = this._poppedInstrument;
+    const popout = document.getElementById('instrument-popout');
+    if (pane && dockContainer) {
+      dockContainer.appendChild(pane);
+    }
+    if (popout) popout.classList.add('hidden');
+    this._poppedInstrument = null;
+
+    const tabBtn = document.getElementById(`tab-${tab}`);
+    if (tabBtn) this._switchBottomTab(tabBtn);
+
+    setTimeout(() => {
+      if (tab === 'oscilloscope') this.osc?._resize?.();
+      if (tab === 'logic-analyzer') this.la?._resize?.();
+      if (tab === 'plotter') this.plotter?._resize?.();
+    }, 50);
+  }
+
+  _initInstrumentPopoutDrag() {
+    const popout = document.getElementById('instrument-popout');
+    const header = document.getElementById('popout-header');
+    if (!popout || !header) return;
+
+    let isDragging = false;
+    let startX = 0, startY = 0;
+    let initialLeft = 0, initialTop = 0;
+
+    header.addEventListener('pointerdown', (e) => {
+      if (e.target && typeof e.target.closest === 'function' && e.target.closest('button')) return;
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      const rect = popout.getBoundingClientRect();
+      initialLeft = rect.left;
+      initialTop = rect.top;
+      try { header.setPointerCapture(e.pointerId); } catch (_) {}
+      e.preventDefault();
+    });
+
+    header.addEventListener('pointermove', (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      const newLeft = Math.max(0, Math.min(window.innerWidth - 100, initialLeft + dx));
+      const newTop = Math.max(0, Math.min(window.innerHeight - 60, initialTop + dy));
+      popout.style.left = `${newLeft}px`;
+      popout.style.top = `${newTop}px`;
+      popout.style.right = 'auto';
+    });
+
+    const endDrag = (e) => {
+      if (!isDragging) return;
+      isDragging = false;
+      try { header.releasePointerCapture(e.pointerId); } catch (_) {}
+    };
+
+    header.addEventListener('pointerup', endDrag);
+    header.addEventListener('pointercancel', endDrag);
   }
 
   _isTabActive(name) {
@@ -5032,6 +5160,7 @@ _newProject() {
       { id: 'format', title: 'Format Code', subtitle: 'Reformat sketch with standard indentation', category: 'action', shortcut: 'Alt+Shift+F', run: () => window.EditorManager?.formatCode?.() },
       { id: 'fit-view', title: 'Fit Circuit to View', subtitle: 'Reset zoom and center circuit', category: 'action', shortcut: 'F', run: () => this.canvas?.fitView?.() },
       { id: 'toggle-minimap', title: 'Toggle Canvas Mini-Map Navigator', subtitle: 'Show or hide circuit overview thumbnail', category: 'action', shortcut: 'M', run: () => this.canvas?.toggleMinimap?.() },
+      { id: 'toggle-current-flow', title: 'Toggle Animated Current / Signal Flow', subtitle: 'Show or hide live flowing signal animation on wires', category: 'action', shortcut: 'Alt+C', run: () => this.canvas?.toggleCurrentAnimation?.() },
       { id: 'clear-canvas', title: 'Clear Circuit Canvas', subtitle: 'Remove all components and wires', category: 'action', run: () => this.clearCanvas() },
       { id: 'export-png', title: 'Export Circuit as PNG', subtitle: 'Download high-res schematic image', category: 'action', run: () => this.exportImage() },
       { id: 'save-project', title: 'Save Project', subtitle: 'Save sketch and circuit to local library', category: 'action', shortcut: 'Ctrl+S', run: () => this.saveProject() },
@@ -5097,7 +5226,13 @@ _newProject() {
       }},
       { id: 'export-la-vcd', title: 'Export Logic Analyzer (VCD)', subtitle: 'Value Change Dump for PulseView / GTKWave', category: 'instrument', run: () => this.la?.exportVCD() },
       { id: 'export-la-csv', title: 'Export Logic Analyzer (CSV)', subtitle: 'Export multi-channel digital waveform capture', category: 'instrument', run: () => this.la?.exportCSV() },
-      { id: 'export-osc-csv', title: 'Export Oscilloscope (CSV)', subtitle: 'Export dual-channel analog waveform traces', category: 'instrument', run: () => this.osc?.exportCSV() }
+      { id: 'export-osc-csv', title: 'Export Oscilloscope (CSV)', subtitle: 'Export dual-channel analog waveform traces', category: 'instrument', run: () => this.osc?.exportCSV() },
+      { id: 'popout-instrument', title: 'Pop Out Active Instrument (Floating Window)', subtitle: 'Detach current instrument into movable floating window', category: 'instrument', shortcut: '⧉', run: () => this.popoutInstrument() },
+      { id: 'dock-instrument', title: 'Dock Floating Instrument', subtitle: 'Restore floating instrument back to bottom panel', category: 'instrument', run: () => this.dockInstrument() },
+      { id: 'decoder-uart-9600', title: 'Logic Analyzer: Enable UART Decoder (9600 8N1)', subtitle: 'Decode async serial frames into ASCII and hex', category: 'instrument', run: () => this.la?.setDecoder('uart_9600') },
+      { id: 'decoder-uart-115200', title: 'Logic Analyzer: Enable UART Decoder (115200 8N1)', subtitle: 'Decode high-speed async serial frames', category: 'instrument', run: () => this.la?.setDecoder('uart_115200') },
+      { id: 'decoder-i2c', title: 'Logic Analyzer: Enable I2C Decoder', subtitle: 'Decode 7-bit address and data bytes with ACK/NACK', category: 'instrument', run: () => this.la?.setDecoder('i2c') },
+      { id: 'decoder-none', title: 'Logic Analyzer: Disable Decoder', subtitle: 'Turn off protocol decoder overlay', category: 'instrument', run: () => this.la?.setDecoder('none') }
     ];
 
     // Add components from COMPONENT_DEFS
