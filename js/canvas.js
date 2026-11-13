@@ -195,6 +195,9 @@ class CircuitCanvas {
     this._minimapTransform = null;
     this.highlightedPin = null;
 
+    /* Animated Current / Signal Flow (Phase 3) */
+    this.animatedCurrentFlow = true;
+
     this._initMinimap();
   }
 
@@ -815,6 +818,33 @@ class CircuitCanvas {
     for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
     ctx.stroke();
 
+    // Animated marching current / signal flow (Phase 3)
+    if (this._isWireConducting(wire)) {
+      ctx.save();
+      const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      const speed = 0.035;
+      const dash = 5 / this.zoom;
+      const gap = 7 / this.zoom;
+      const period = dash + gap;
+      const offset = -((now * speed) % period);
+
+      ctx.strokeStyle = '#fff59d';
+      ctx.lineWidth = Math.max(1.5, 2.0 / this.zoom);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.shadowColor = '#ffee58';
+      ctx.shadowBlur = 4 / this.zoom;
+      if (typeof ctx.setLineDash === 'function') {
+        ctx.setLineDash([dash, gap]);
+        ctx.lineDashOffset = offset;
+      }
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     // Junction dots at the pins
     ctx.shadowBlur = 0;
     ctx.fillStyle = highlighted ? '#00e5ff' : color;
@@ -861,6 +891,32 @@ class CircuitCanvas {
     ctx.moveTo(p1.x, p1.y);
     ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, p2.x, p2.y);
     ctx.stroke();
+
+    // Animated marching current / signal flow (Phase 3)
+    if (this._isWireConducting(wire)) {
+      ctx.save();
+      const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      const speed = 0.035;
+      const dash = 5 / this.zoom;
+      const gap = 7 / this.zoom;
+      const period = dash + gap;
+      const offset = -((now * speed) % period);
+
+      ctx.strokeStyle = '#fff59d';
+      ctx.lineWidth = Math.max(1.5, 2.0 / this.zoom);
+      ctx.lineCap = 'round';
+      ctx.shadowColor = '#ffee58';
+      ctx.shadowBlur = 4 / this.zoom;
+      if (typeof ctx.setLineDash === 'function') {
+        ctx.setLineDash([dash, gap]);
+        ctx.lineDashOffset = offset;
+      }
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, p2.x, p2.y);
+      ctx.stroke();
+      ctx.restore();
+    }
 
     // Junction dots at the pins
     ctx.shadowBlur = 0;
@@ -3357,6 +3413,7 @@ class CircuitCanvas {
     }
     if (e.key === 'f' || e.key === 'F') { this.fitView(); }
     if ((e.key === 'm' || e.key === 'M') && !e.ctrlKey && !e.metaKey && !e.altKey) { this.toggleMinimap(); }
+    if (e.altKey && (e.key === 'c' || e.key === 'C')) { e.preventDefault(); this.toggleCurrentAnimation(); }
     if (e.ctrlKey && e.key.toLowerCase() === 'c') { this.copySelected(); }
     if (e.ctrlKey && e.key.toLowerCase() === 'v') { this.paste(); }
     if (e.ctrlKey && e.key.toLowerCase() === 'd') { e.preventDefault(); this.duplicateSelected(); }
@@ -4286,6 +4343,49 @@ class CircuitCanvas {
     }
 
     ctx.restore();
+  }
+
+  /* -------------- PHASE 3: CURRENT FLOW ANIMATION -------------- */
+  _isWireConducting(wire) {
+    if (!wire || !this.animatedCurrentFlow) return false;
+    const sim = window.ArduinoSim;
+    const isRunning = !!(sim && sim.isRunning);
+    const t1 = this._getPinType(wire.from?.instId, wire.from?.pinId);
+    const t2 = this._getPinType(wire.to?.instId, wire.to?.pinId);
+
+    if (!isRunning) {
+      if (this._hasStandalonePower) {
+        return t1 === 'power' || t2 === 'power';
+      }
+      return false;
+    }
+
+    const k1 = this._getPinKey(wire.from?.instId, wire.from?.pinId);
+    const k2 = this._getPinKey(wire.to?.instId, wire.to?.pinId);
+    const v1 = sim.pinStates ? (sim.pinStates[k1] || 0) : 0;
+    const v2 = sim.pinStates ? (sim.pinStates[k2] || 0) : 0;
+
+    if (t1 === 'power' || t2 === 'power' || v1 > 0 || v2 > 0) return true;
+    if (this.engine) {
+      const p1V = this.engine.getVoltageAtPin(wire.from?.instId, wire.from?.pinId);
+      const p2V = this.engine.getVoltageAtPin(wire.to?.instId, wire.to?.pinId);
+      if (Math.abs((p1V || 0) - (p2V || 0)) > 0.05 || (p1V && p1V > 0.5) || (p2V && p2V > 0.5)) return true;
+    }
+    return false;
+  }
+
+  toggleCurrentAnimation(force) {
+    if (typeof force === 'boolean') {
+      this.animatedCurrentFlow = force;
+    } else {
+      this.animatedCurrentFlow = !this.animatedCurrentFlow;
+    }
+    const btn = typeof document !== 'undefined' ? document.getElementById('btn-toggle-current-flow') : null;
+    if (btn) {
+      btn.classList.toggle('active', this.animatedCurrentFlow);
+      btn.setAttribute('aria-pressed', this.animatedCurrentFlow ? 'true' : 'false');
+    }
+    return this.animatedCurrentFlow;
   }
 
   /* -------------- HISTORY -------------- */
