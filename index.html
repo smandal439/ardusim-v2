@@ -566,12 +566,22 @@
                             <path d="M4 8a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7A.5.5 0 0 1 4 8" />
                         </svg> </button> </div>
             </div>
-            <div class="component-search-box"> <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"
-                    class="search-icon">
-                    <path
-                        d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0" />
-                </svg> <input type="text" id="component-search" placeholder="Search components..."
-                    aria-label="Search components" /> <span class="search-clear" id="search-clear" title="Clear search"><svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg></span> <button type="button" class="search-collapse-all" id="groups-collapse-all" title="Collapse all groups" aria-label="Collapse all groups"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l4-4 4 4"/><path d="M4 12l4-4 4 4"/></svg></button> </div>
+            <div class="component-search-box">
+                <svg class="cmd-palette-search-icon search-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0" />
+                </svg>
+                <input type="text" id="component-search" placeholder="Search components... (or Ctrl+K)" aria-label="Search components" autocomplete="off" spellcheck="false" />
+                <span class="search-clear" id="search-clear" title="Clear search" role="button" aria-label="Clear search">
+                    <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
+                    </svg>
+                </span>
+                <button type="button" class="search-collapse-all" id="groups-collapse-all" title="Collapse all groups" aria-label="Collapse all groups">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 7l4-4 4 4"/><path d="M4 12l4-4 4 4"/>
+                    </svg>
+                </button>
+            </div>
             <div class="components-container" id="components-container"> <!-- Rendered by JS --> </div>
         </div>
     </div> <!-- ---------------------- BOTTOM PANEL ---------------------- -->
