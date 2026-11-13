@@ -186,6 +186,16 @@ class CircuitCanvas {
     /* Pin tooltip */
     this.tooltipEl = null;
     this._tipKey = null;
+
+    /* Mini-Map & Pin Cross-Probing (Phase 2) */
+    this.minimapVisible = true;
+    this.minimapCanvas = null;
+    this.minimapContainer = null;
+    this.minimapDragging = false;
+    this._minimapTransform = null;
+    this.highlightedPin = null;
+
+    this._initMinimap();
   }
 
   /* -------------- RESIZE -------------- */
@@ -254,8 +264,10 @@ class CircuitCanvas {
     this._drawComponents(ctx);
     try { this._drawInteractives(ctx); } catch (_e) { /* guard interactive rendering */ }
     this._drawOverlays(ctx);
+    this._drawPinHighlight(ctx);
 
     ctx.restore();
+    this._renderMinimap();
     this._rafId = requestAnimationFrame(() => this._render());
   }
 
@@ -3344,6 +3356,7 @@ class CircuitCanvas {
       this.selectedAnnotation = null;
     }
     if (e.key === 'f' || e.key === 'F') { this.fitView(); }
+    if ((e.key === 'm' || e.key === 'M') && !e.ctrlKey && !e.metaKey && !e.altKey) { this.toggleMinimap(); }
     if (e.ctrlKey && e.key.toLowerCase() === 'c') { this.copySelected(); }
     if (e.ctrlKey && e.key.toLowerCase() === 'v') { this.paste(); }
     if (e.ctrlKey && e.key.toLowerCase() === 'd') { e.preventDefault(); this.duplicateSelected(); }
@@ -3569,6 +3582,25 @@ class CircuitCanvas {
       } else {
         addRow('State', 'Idle');
       }
+
+      // Active sketch reference count (Phase 2 Cross-Probing)
+      const editorCode = (window.App?.editor?.getValue && typeof window.App.editor.getValue === 'function')
+        ? window.App.editor.getValue()
+        : (window.ArduinoSim?.sketch || '');
+      if (editorCode) {
+        const pinIdStr = pin.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const numStr = (pinNum !== null && Number.isFinite(pinNum)) ? String(pinNum) : '';
+        const aliases = [pinIdStr];
+        if (numStr && numStr !== pinIdStr) aliases.push(numStr);
+        if (pin.id === 'D13' || pinNum === 13) aliases.push('LED_BUILTIN');
+        const pattern = new RegExp(`\\b(${aliases.join('|')})\\b`, 'g');
+        const matches = editorCode.match(pattern);
+        const count = matches ? matches.length : 0;
+        if (count > 0) {
+          addRow('Sketch References', `${count} occurrence${count === 1 ? '' : 's'}`);
+        }
+      }
+
       el.appendChild(frag);
     }
 
@@ -3835,6 +3867,426 @@ class CircuitCanvas {
 
   zoomIn() { this.zoom = Math.min(4, this.zoom * 1.2); this._updateZoomDisplay(); }
   zoomOut() { this.zoom = Math.max(0.1, this.zoom / 1.2); this._updateZoomDisplay(); }
+
+  /* -------------- PHASE 2: MINI-MAP NAVIGATOR -------------- */
+  _initMinimap() {
+    if (typeof document === 'undefined') return;
+    this.minimapContainer = document.getElementById('canvas-minimap');
+    this.minimapCanvas = document.getElementById('minimap-canvas');
+
+    const closeBtn = document.getElementById('btn-close-minimap');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleMinimap(false);
+      });
+    }
+
+    const toggleBtn = document.getElementById('btn-toggle-minimap');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleMinimap();
+      });
+    }
+
+    if (this.minimapCanvas) {
+      this.minimapCanvas.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.minimapDragging = true;
+        try { this.minimapCanvas.setPointerCapture(e.pointerId); } catch (_) {}
+        this._panFromMinimap(e);
+      });
+
+      this.minimapCanvas.addEventListener('pointermove', (e) => {
+        if (!this.minimapDragging) return;
+        e.preventDefault();
+        e.stopPropagation();
+        this._panFromMinimap(e);
+      });
+
+      const endDrag = (e) => {
+        if (!this.minimapDragging) return;
+        this.minimapDragging = false;
+        try { this.minimapCanvas.releasePointerCapture(e.pointerId); } catch (_) {}
+      };
+      this.minimapCanvas.addEventListener('pointerup', endDrag);
+      this.minimapCanvas.addEventListener('pointercancel', endDrag);
+    }
+  }
+
+  toggleMinimap(force) {
+    if (typeof force === 'boolean') {
+      this.minimapVisible = force;
+    } else {
+      this.minimapVisible = !this.minimapVisible;
+    }
+
+    if (!this.minimapContainer && typeof document !== 'undefined') {
+      this.minimapContainer = document.getElementById('canvas-minimap');
+    }
+    if (this.minimapContainer) {
+      this.minimapContainer.classList.toggle('hidden', !this.minimapVisible);
+    }
+
+    const toggleBtn = typeof document !== 'undefined' ? document.getElementById('btn-toggle-minimap') : null;
+    if (toggleBtn) {
+      toggleBtn.classList.toggle('active', this.minimapVisible);
+      toggleBtn.setAttribute('aria-pressed', this.minimapVisible ? 'true' : 'false');
+    }
+
+    if (this.minimapVisible) {
+      this._renderMinimap();
+    }
+    return this.minimapVisible;
+  }
+
+  _panFromMinimap(e) {
+    if (!this.minimapCanvas || !this._minimapTransform) return;
+    const rect = this.minimapCanvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const { worldMinX, worldMinY, offX, offY, mmScale } = this._minimapTransform;
+    if (!mmScale || mmScale <= 0) return;
+
+    const targetWx = worldMinX + (mx - offX) / mmScale;
+    const targetWy = worldMinY + (my - offY) / mmScale;
+
+    const vw = this._viewportWidth || this.canvas.width;
+    const vh = this._viewportHeight || this.canvas.height;
+
+    this.panX = (vw / 2) - (targetWx * this.zoom);
+    this.panY = (vh / 2) - (targetWy * this.zoom);
+  }
+
+  _renderMinimap() {
+    if (!this.minimapVisible || !this.minimapCanvas) return;
+    const mm = this.minimapCanvas;
+    const mmCtx = mm.getContext('2d');
+    if (!mmCtx) return;
+
+    const mmW = mm.width || 180;
+    const mmH = mm.height || 110;
+
+    const vw = this._viewportWidth || this.canvas.width;
+    const vh = this._viewportHeight || this.canvas.height;
+    const viewMinX = -this.panX / this.zoom;
+    const viewMinY = -this.panY / this.zoom;
+    const viewMaxX = viewMinX + (vw / this.zoom);
+    const viewMaxY = viewMinY + (vh / this.zoom);
+
+    let minX = viewMinX;
+    let minY = viewMinY;
+    let maxX = viewMaxX;
+    let maxY = viewMaxY;
+
+    const defs = window.ArduinoComponents && window.ArduinoComponents.COMPONENT_DEFS;
+    for (const inst of this.components) {
+      const def = defs && defs[inst.type];
+      const w = (def && def.width) || 40;
+      const h = (def && def.height) || 40;
+      minX = Math.min(minX, inst.x);
+      minY = Math.min(minY, inst.y);
+      maxX = Math.max(maxX, inst.x + w);
+      maxY = Math.max(maxY, inst.y + h);
+    }
+
+    for (const annotation of this.annotations || []) {
+      const b = this._annotationBounds(annotation);
+      if (b) {
+        minX = Math.min(minX, b.x);
+        minY = Math.min(minY, b.y);
+        maxX = Math.max(maxX, b.x + b.width);
+        maxY = Math.max(maxY, b.y + b.height);
+      }
+    }
+
+    const pad = 60;
+    minX -= pad;
+    minY -= pad;
+    maxX += pad;
+    maxY += pad;
+
+    const worldW = Math.max(100, maxX - minX);
+    const worldH = Math.max(100, maxY - minY);
+
+    const targetW = mmW - 12;
+    const targetH = mmH - 12;
+    const mmScale = Math.min(targetW / worldW, targetH / worldH);
+    const offX = 6 + (targetW - worldW * mmScale) / 2;
+    const offY = 6 + (targetH - worldH * mmScale) / 2;
+
+    this._minimapTransform = { worldMinX: minX, worldMinY: minY, offX, offY, mmScale };
+
+    mmCtx.clearRect(0, 0, mmW, mmH);
+
+    // Background
+    mmCtx.fillStyle = '#11141c';
+    mmCtx.fillRect(0, 0, mmW, mmH);
+
+    // Mini grid dots
+    mmCtx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+    for (let gx = offX; gx < offX + worldW * mmScale; gx += 18) {
+      for (let gy = offY; gy < offY + worldH * mmScale; gy += 18) {
+        mmCtx.fillRect(gx, gy, 1, 1);
+      }
+    }
+
+    // Wires
+    mmCtx.lineWidth = 1;
+    for (const wire of this.wires) {
+      const p1 = this._getPinWorldPos(wire.from.instId, wire.from.pinId);
+      const p2 = this._getPinWorldPos(wire.to.instId, wire.to.pinId);
+      if (!p1 || !p2) continue;
+      const x1 = offX + (p1.x - minX) * mmScale;
+      const y1 = offY + (p1.y - minY) * mmScale;
+      const x2 = offX + (p2.x - minX) * mmScale;
+      const y2 = offY + (p2.y - minY) * mmScale;
+      mmCtx.strokeStyle = wire.color || '#4caf50';
+      mmCtx.beginPath();
+      mmCtx.moveTo(x1, y1);
+      mmCtx.lineTo(x2, y2);
+      mmCtx.stroke();
+    }
+
+    // Components
+    const boardTypes = ['arduino_uno', 'esp32_devkit_v1', 'arduino_nano', 'stm32f746_disco', 'lpc2148', 'pico2w', 'intel_8085', 'intel_8051', 'industrial_plc'];
+    for (const inst of this.components) {
+      const def = defs && defs[inst.type];
+      const w = Math.max(3, ((def && def.width) || 40) * mmScale);
+      const h = Math.max(3, ((def && def.height) || 40) * mmScale);
+      const x = offX + (inst.x - minX) * mmScale;
+      const y = offY + (inst.y - minY) * mmScale;
+
+      const isBoard = boardTypes.includes(inst.type);
+      mmCtx.fillStyle = inst.selected ? '#00e5ff' : (isBoard ? '#1976d2' : '#374151');
+      mmCtx.fillRect(x, y, w, h);
+      mmCtx.strokeStyle = inst.selected ? '#ffffff' : (isBoard ? '#64b5f6' : 'rgba(255, 255, 255, 0.2)');
+      mmCtx.lineWidth = 0.8;
+      mmCtx.strokeRect(x, y, w, h);
+    }
+
+    // Viewport Illuminated Rectangle
+    const vpX = offX + (viewMinX - minX) * mmScale;
+    const vpY = offY + (viewMinY - minY) * mmScale;
+    const vpW = (viewMaxX - viewMinX) * mmScale;
+    const vpH = (viewMaxY - viewMinY) * mmScale;
+
+    mmCtx.fillStyle = 'rgba(0, 229, 255, 0.12)';
+    mmCtx.fillRect(vpX, vpY, vpW, vpH);
+    mmCtx.strokeStyle = '#00e5ff';
+    mmCtx.lineWidth = 1.5;
+    mmCtx.strokeRect(vpX, vpY, vpW, vpH);
+  }
+
+  /* -------------- PHASE 2: PIN CROSS-PROBING -------------- */
+  _matchPinIdentifier(pin, identifier) {
+    if (!pin || !identifier) return false;
+    const id = String(pin.id).toLowerCase();
+    const lbl = String(pin.label || '').toLowerCase();
+    const query = String(identifier).toLowerCase();
+
+    if (id === query || lbl === query) return true;
+    if (query === 'led_builtin' && (id === 'd13' || id === '13' || lbl === '13')) return true;
+    if (/^\d+$/.test(query)) {
+      if (id === `d${query}` || lbl === `d${query}` || lbl === query) return true;
+      if (this._pinToNumber(pin.id) === Number(query)) return true;
+    }
+    if (/^d\d+$/i.test(query)) {
+      const num = query.slice(1);
+      if (id === num || lbl === num) return true;
+    }
+    if (/^a\d+$/i.test(query)) {
+      if (id === query || lbl === query) return true;
+    }
+    return false;
+  }
+
+  highlightPin(pinIdentifier, instId = null) {
+    if (!pinIdentifier) {
+      this.clearPinHighlight();
+      return null;
+    }
+
+    const normPin = String(pinIdentifier).trim();
+    const boardTypes = ['arduino_uno', 'esp32_devkit_v1', 'arduino_nano', 'stm32f746_disco', 'lpc2148', 'pico2w', 'intel_8085', 'intel_8051', 'industrial_plc'];
+    const defs = window.ArduinoComponents && window.ArduinoComponents.COMPONENT_DEFS;
+
+    // 1. Identify target component (MCU board if not specified)
+    let targetInst = null;
+    if (instId) {
+      targetInst = this.components.find(c => c.id === instId);
+    } else {
+      // Find MCU board first
+      targetInst = this.components.find(c => boardTypes.includes(c.type));
+      if (!targetInst && this.components.length > 0) {
+        // Fallback: look for any component having this pin
+        for (const comp of this.components) {
+          const def = defs && defs[comp.type];
+          if (def && Array.isArray(def.pins) && def.pins.some(p => this._matchPinIdentifier(p, normPin))) {
+            targetInst = comp;
+            break;
+          }
+        }
+      }
+    }
+    if (!targetInst) return null;
+
+    const def = defs && defs[targetInst.type];
+    if (!def || !Array.isArray(def.pins)) return null;
+
+    // 2. Find matching pin on target component
+    const matchedPin = def.pins.find(p => this._matchPinIdentifier(p, normPin));
+    if (!matchedPin) return null;
+
+    // 3. Find connected wires and target counterpart components
+    const connectedWires = [];
+    const connectedComponents = [];
+
+    for (const wire of this.wires) {
+      let otherInstId = null;
+      let otherPinId = null;
+
+      if (wire.from.instId === targetInst.id && wire.from.pinId === matchedPin.id) {
+        otherInstId = wire.to.instId;
+        otherPinId = wire.to.pinId;
+      } else if (wire.to.instId === targetInst.id && wire.to.pinId === matchedPin.id) {
+        otherInstId = wire.from.instId;
+        otherPinId = wire.from.pinId;
+      }
+
+      if (otherInstId) {
+        connectedWires.push(wire);
+        const otherComp = this.components.find(c => c.id === otherInstId);
+        if (otherComp) {
+          const otherDef = defs && defs[otherComp.type];
+          const otherPin = otherDef?.pins?.find(p => p.id === otherPinId);
+          connectedComponents.push({
+            inst: otherComp,
+            pin: otherPin || { id: otherPinId, label: otherPinId },
+            wire,
+          });
+        }
+      }
+    }
+
+    this.highlightedPin = {
+      inst: targetInst,
+      pin: matchedPin,
+      wires: connectedWires,
+      connections: connectedComponents,
+    };
+
+    return this.highlightedPin;
+  }
+
+  clearPinHighlight() {
+    if (this.highlightedPin) {
+      this.highlightedPin = null;
+    }
+  }
+
+  getPinConnections(pinIdentifier, instId = null) {
+    const hl = this.highlightPin(pinIdentifier, instId);
+    if (!hl) return null;
+
+    const defs = window.ArduinoComponents && window.ArduinoComponents.COMPONENT_DEFS;
+    const boardDef = defs && defs[hl.inst.type];
+    const sim = window.ArduinoSim;
+    const pinNum = this._pinToNumber(hl.pin.id);
+
+    let pinMode = 'INPUT';
+    if (sim && sim.pinModes && pinNum !== null && sim.pinModes[pinNum]) {
+      pinMode = sim.pinModes[pinNum];
+    }
+
+    const connectedDetails = hl.connections.map(c => {
+      const cDef = defs && defs[c.inst.type];
+      const name = c.inst.props?.label || cDef?.name || c.inst.type;
+      return {
+        name,
+        type: c.inst.type,
+        pinLabel: c.pin.label || c.pin.id,
+        wireColor: c.wire?.color || '#4caf50',
+      };
+    });
+
+    return {
+      boardName: hl.inst.props?.label || boardDef?.name || hl.inst.type,
+      pinId: hl.pin.id,
+      pinLabel: hl.pin.label || hl.pin.id,
+      pinNumber: pinNum,
+      pinType: hl.pin.type || 'digital',
+      pinMode,
+      connectedComponents: connectedDetails,
+    };
+  }
+
+  _drawPinHighlight(ctx) {
+    if (!this.highlightedPin) return;
+    const { inst, pin, wires, connections } = this.highlightedPin;
+    if (!inst || !pin) return;
+    const pos = this._getPinWorldPos(inst.id, pin.id);
+
+    ctx.save();
+
+    // 1. Highlight connected wires with cyan glow
+    for (const wire of wires || []) {
+      const pathData = this._wirePath(wire);
+      if (pathData) {
+        ctx.save();
+        ctx.strokeStyle = '#00e5ff';
+        ctx.shadowColor = '#00e5ff';
+        ctx.shadowBlur = 14 / this.zoom;
+        ctx.lineWidth = Math.max(3.5, 4.5 / this.zoom);
+        if (pathData.type === 'bezier') {
+          this._drawBezierWire(ctx, pathData, '#00e5ff', true, wire);
+        } else {
+          this._drawOrthogonalWire(ctx, pathData.pts, '#00e5ff', true, wire);
+        }
+        ctx.restore();
+      }
+    }
+
+    // 2. Highlight connected components
+    const defs = window.ArduinoComponents && window.ArduinoComponents.COMPONENT_DEFS;
+    for (const conn of connections || []) {
+      const c = conn.inst;
+      if (!c) continue;
+      const def = defs && defs[c.type];
+      const cw = (def && def.width) || 40;
+      const ch = (def && def.height) || 40;
+
+      ctx.save();
+      ctx.strokeStyle = '#00e5ff';
+      ctx.fillStyle = 'rgba(0, 229, 255, 0.08)';
+      ctx.shadowColor = '#00e5ff';
+      ctx.shadowBlur = 10 / this.zoom;
+      ctx.lineWidth = 2 / this.zoom;
+      if (typeof ctx.setLineDash === 'function') ctx.setLineDash([4 / this.zoom, 3 / this.zoom]);
+      ctx.strokeRect(c.x - 4, c.y - 4, cw + 8, ch + 8);
+      ctx.fillRect(c.x - 4, c.y - 4, cw + 8, ch + 8);
+      ctx.restore();
+    }
+
+    // 3. Highlight pin with glowing halo
+    if (pos) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(0, 229, 255, 0.45)';
+      ctx.strokeStyle = '#00e5ff';
+      ctx.shadowColor = '#00e5ff';
+      ctx.shadowBlur = 12 / this.zoom;
+      ctx.lineWidth = 3 / this.zoom;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 8 / this.zoom, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
 
   /* -------------- HISTORY -------------- */
   _serializeState() {

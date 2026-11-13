@@ -343,6 +343,43 @@ DL2:    DJNZ R3, DL2
         const word = model.getWordAtPosition(position);
         if (!word) return null;
 
+        const w = word.word;
+        const lineContent = (typeof model.getLineContent === 'function') ? (model.getLineContent(position.lineNumber) || '') : '';
+
+        // Code-to-Canvas Pin Cross-Probing (Phase 2)
+        const isPinToken = /^(A\d+|D\d+|GPIO\d+|\d+|LED_BUILTIN|SDA|SCL)$/i.test(w);
+        const isPinFunc = /^(pinMode|digitalWrite|digitalRead|analogRead|analogWrite)$/.test(w);
+
+        let probeToken = null;
+        if (isPinToken) {
+          probeToken = w;
+        } else if (isPinFunc) {
+          const match = lineContent.match(new RegExp(w + '\\s*\\(\\s*([^,\\)\\s]+)'));
+          if (match && match[1]) {
+            probeToken = match[1].replace(/['"]/g, '');
+          }
+        }
+
+        const canvas = window.CircuitCanvas || (window.App && window.App.canvas);
+        let pinTooltip = null;
+        if (probeToken && canvas && typeof canvas.getPinConnections === 'function') {
+          const pinInfo = canvas.getPinConnections(probeToken);
+          if (pinInfo) {
+            let md = `### 🔌 ${pinInfo.pinLabel} (${pinInfo.boardName})\n\n`;
+            md += `- **Type:** \`${pinInfo.pinType}\`\n`;
+            md += `- **Configured Mode:** \`${pinInfo.pinMode}\`\n`;
+            if (pinInfo.connectedComponents && pinInfo.connectedComponents.length > 0) {
+              md += `- **Connected Hardware:**\n`;
+              for (const c of pinInfo.connectedComponents) {
+                md += `  - **${c.name}** (pin \`${c.pinLabel}\`) via *${c.wireColor}* wire\n`;
+              }
+            } else {
+              md += `- **Connected Hardware:** *No wires connected*\n`;
+            }
+            pinTooltip = md;
+          }
+        }
+
         const docs = {
           pinMode: '**pinMode(pin, mode)**\n\nConfigures the specified pin to behave either as an input or an output.',
           digitalWrite: '**digitalWrite(pin, value)**\n\nWrites a `HIGH` or a `LOW` value to a digital pin.',
@@ -385,8 +422,15 @@ DL2:    DJNZ R3, DL2
           }
         }
 
-        if (docs[word.word]) {
-          return { contents: [{ value: docs[word.word] }] };
+        if (pinTooltip) {
+          if (docs[w]) {
+            pinTooltip += `\n\n---\n\n${docs[w]}`;
+          }
+          return { contents: [{ value: pinTooltip }] };
+        }
+
+        if (docs[w]) {
+          return { contents: [{ value: docs[w] }] };
         }
         return null;
       }
@@ -624,11 +668,24 @@ DL2:    DJNZ R3, DL2
       }
     }, { passive: false });
 
-    // Cursor position display
+    // Cursor position display and clear pin cross-probing highlight
     this.editor.onDidChangeCursorPosition(e => {
       const pos = document.getElementById('editor-cursor');
       if (pos) pos.textContent = `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
+      const cv = window.CircuitCanvas || (window.App && window.App.canvas);
+      if (cv && typeof cv.clearPinHighlight === 'function') {
+        cv.clearPinHighlight();
+      }
     });
+
+    if (typeof this.editor.onMouseLeave === 'function') {
+      this.editor.onMouseLeave(() => {
+        const cv = window.CircuitCanvas || (window.App && window.App.canvas);
+        if (cv && typeof cv.clearPinHighlight === 'function') {
+          cv.clearPinHighlight();
+        }
+      });
+    }
 
     // Auto-save on change & auto-clear compilation error markers
     this.editor.onDidChangeModelContent(() => {
@@ -662,14 +719,10 @@ DL2:    DJNZ R3, DL2
       this.formatCode(false);
     });
 
-    // Native Format Selection Shortcut (Ctrl+K Ctrl+F)
-    this.editor.addCommand(
-      monaco.KeyMod.chord(
-        monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK,
-        monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF
-      ),
-      () => this.formatCode(true)
-    );
+    // Command Palette Shortcut (Ctrl+K / Cmd+K)
+    this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK, () => {
+      window.App?._openCommandPalette?.();
+    });
 
     // Copy Shareable URL Shortcut (Ctrl+Shift+S)
     this.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyS, async () => {

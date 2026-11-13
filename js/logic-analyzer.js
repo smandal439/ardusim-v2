@@ -886,6 +886,131 @@ class LogicAnalyzer {
     if (this._rafId) cancelAnimationFrame(this._rafId);
     this._ro?.disconnect();
   }
+
+  /* ── Export Captures (Phase 2) ── */
+  _downloadFile(content, filename, mimeType = 'text/plain') {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return content;
+    try {
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (_) {}
+    return content;
+  }
+
+  exportVCD() {
+    const enabledChannels = this.channels.filter(ch => ch.enabled && ch.pin && ch.pin !== 'none');
+    if (enabledChannels.length === 0) return '';
+
+    const idChars = '!#$%&()*+,-./:;<=>?@[]^_`{|}~';
+    const channelIds = enabledChannels.map((ch, idx) => ({
+      ch,
+      id: idChars[idx % idChars.length] || String.fromCharCode(33 + idx),
+    }));
+
+    const dateStr = new Date().toISOString();
+    let vcd = `$date\n   ${dateStr}\n$end\n`;
+    vcd += `$version\n   ArduSim v2 Logic Analyzer\n$end\n`;
+    vcd += `$timescale\n   1us\n$end\n`;
+    vcd += `$scope module logic_analyzer $end\n`;
+
+    for (const { ch, id } of channelIds) {
+      const label = `${ch.label}_${ch.pin}`.replace(/[^a-zA-Z0-9_]/g, '_');
+      vcd += `$var wire 1 ${id} ${label} $end\n`;
+    }
+
+    vcd += `$upscope $end\n`;
+    vcd += `$enddefinitions $end\n`;
+    vcd += `$dumpvars\n`;
+
+    // Initial values
+    for (const { ch, id } of channelIds) {
+      const samples = this.data[ch.pin] || [];
+      const initVal = samples.length > 0 ? (samples[0].v ? 1 : 0) : 0;
+      vcd += `${initVal}${id}\n`;
+    }
+    vcd += `$end\n`;
+
+    // Group sample transitions by microsecond timestamps
+    const timeMap = new Map();
+    for (const { ch, id } of channelIds) {
+      const samples = this.data[ch.pin] || [];
+      let lastVal = null;
+      for (const s of samples) {
+        if (lastVal === null || s.v !== lastVal) {
+          const tUs = Math.max(0, Math.round((s.t || 0) * 1000));
+          if (!timeMap.has(tUs)) timeMap.set(tUs, new Map());
+          timeMap.get(tUs).set(id, s.v ? 1 : 0);
+          lastVal = s.v;
+        }
+      }
+    }
+
+    // Sort timestamps ascending
+    const sortedTimes = Array.from(timeMap.keys()).sort((a, b) => a - b);
+    for (const tUs of sortedTimes) {
+      vcd += `#${tUs}\n`;
+      const changeMap = timeMap.get(tUs);
+      for (const [id, val] of changeMap.entries()) {
+        vcd += `${val}${id}\n`;
+      }
+    }
+
+    const filename = `logic_analyzer_${Date.now()}.vcd`;
+    this._downloadFile(vcd, filename, 'text/plain');
+    return vcd;
+  }
+
+  exportCSV() {
+    const enabledChannels = this.channels.filter(ch => ch.enabled && ch.pin && ch.pin !== 'none');
+    if (enabledChannels.length === 0) return '';
+
+    const headers = ['Time_ms', ...enabledChannels.map(ch => `${ch.label}_${ch.pin}`)];
+    let csv = headers.join(',') + '\n';
+
+    // Collect all timestamps
+    const allTimesSet = new Set();
+    for (const ch of enabledChannels) {
+      const samples = this.data[ch.pin] || [];
+      for (const s of samples) {
+        allTimesSet.add(s.t || 0);
+      }
+    }
+    const sortedTimes = Array.from(allTimesSet).sort((a, b) => a - b);
+
+    // Track last seen value for hold interpolation
+    const lastValues = {};
+    const sampleIndices = {};
+    for (const ch of enabledChannels) {
+      lastValues[ch.pin] = 0;
+      sampleIndices[ch.pin] = 0;
+    }
+
+    for (const t of sortedTimes) {
+      const row = [Number(t).toFixed(3)];
+      for (const ch of enabledChannels) {
+        const samples = this.data[ch.pin] || [];
+        let idx = sampleIndices[ch.pin];
+        while (idx < samples.length && samples[idx].t <= t) {
+          lastValues[ch.pin] = samples[idx].v ? 1 : 0;
+          idx++;
+        }
+        sampleIndices[ch.pin] = idx;
+        row.push(lastValues[ch.pin]);
+      }
+      csv += row.join(',') + '\n';
+    }
+
+    const filename = `logic_analyzer_${Date.now()}.csv`;
+    this._downloadFile(csv, filename, 'text/csv');
+    return csv;
+  }
 }
 
 window.LogicAnalyzerClass = LogicAnalyzer;

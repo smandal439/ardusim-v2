@@ -514,6 +514,46 @@ class Oscilloscope {
     };
     return map[name] !== undefined ? map[name] : null;
   }
+
+  /* ── Export Captures (Phase 2) ── */
+  _downloadFile(content, filename, mimeType = 'text/plain') {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return content;
+    try {
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (_) {}
+    return content;
+  }
+
+  exportCSV() {
+    const p1 = this.ch1Pin || 'CH1';
+    const p2 = this.ch2Pin || 'CH2';
+    const headers = ['Time_ms', `CH1_${p1}_raw`, `CH1_${p1}_V`, `CH2_${p2}_raw`, `CH2_${p2}_V`];
+    let csv = headers.join(',') + '\n';
+
+    const len = Math.max(this.ch1Data.length, this.ch2Data.length);
+    for (let i = 0; i < len; i++) {
+      const s1 = this.ch1Data[i] || { t: 0, v: 0 };
+      const s2 = this.ch2Data[i] || { t: s1.t, v: 0 };
+      const t = Number(s1.t ?? s2.t ?? 0).toFixed(3);
+      const v1Raw = Number(s1.v || 0);
+      const v1V = ((v1Raw / 1023) * 5.0).toFixed(3);
+      const v2Raw = Number(s2.v || 0);
+      const v2V = ((v2Raw / 1023) * 5.0).toFixed(3);
+      csv += `${t},${v1Raw},${v1V},${v2Raw},${v2V}\n`;
+    }
+
+    const filename = `oscilloscope_${Date.now()}.csv`;
+    this._downloadFile(csv, filename, 'text/csv');
+    return csv;
+  }
 }
 
 window.OscilloscopeClass = Oscilloscope;

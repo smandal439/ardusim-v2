@@ -72,6 +72,8 @@ class App {
       // Initialize second simulator for dual-board
       this._initSim2();
       this._bindBoard2TabUI();
+      this._initWireQuickPalette();
+      this._initCommandPalette();
 
       this._initMobile();
 
@@ -275,6 +277,10 @@ class App {
     showEditorBtn?.addEventListener('click', () => this._togglePanel('panel-editor', toggleEditorBtn, 'Collapse Editor', 'Expand Editor'));
     showComponentsBtn?.addEventListener('click', () => this._togglePanel('panel-components', toggleComponentsBtn, 'Collapse Panel', 'Expand Panel'));
     toggleBottomBtn?.addEventListener('click', () => this._toggleBottomPanel(toggleBottomBtn));
+    get('btn-layout-default')?.addEventListener('click', () => { this._closeHeaderDropdowns(); this.applyLayoutPreset('default'); });
+    get('btn-layout-code')?.addEventListener('click', () => { this._closeHeaderDropdowns(); this.applyLayoutPreset('code'); });
+    get('btn-layout-circuit')?.addEventListener('click', () => { this._closeHeaderDropdowns(); this.applyLayoutPreset('circuit'); });
+    get('btn-layout-debug')?.addEventListener('click', () => { this._closeHeaderDropdowns(); this.applyLayoutPreset('debug'); });
     const viewCodeBtn = get('btn-view-code');
     const viewCircuitBtn = get('btn-view-circuit');
     const viewSerialBtn = get('btn-view-serial');
@@ -285,12 +291,16 @@ class App {
     zoomOutBtn?.addEventListener('click', () => this.canvas?.zoomOut());
     fitViewBtn?.addEventListener('click', () => this.canvas?.fitView());
     canvasFullscreenBtn?.addEventListener('click', () => this._toggleCanvasFullscreen());
+    const toggleMinimapBtn = get('btn-toggle-minimap');
+    toggleMinimapBtn?.addEventListener('click', () => this.canvas?.toggleMinimap());
     const editorFullscreenBtn = get('btn-editor-fullscreen');
     editorFullscreenBtn?.addEventListener('click', () => this._toggleEditorFullscreen());
     undoBtn?.addEventListener('click', () => this.canvas?.undo());
     redoBtn?.addEventListener('click', () => this.canvas?.redo());
     oscClearBtn?.addEventListener('click', () => this.osc?.clear());
     oscPauseBtn?.addEventListener('click', () => this._toggleOscPause(oscPauseBtn));
+    const oscExportBtn = get('btn-osc-export-csv');
+    oscExportBtn?.addEventListener('click', () => this.osc?.exportCSV());
     themeBtn?.addEventListener('click', () => this._toggleTheme(themeIconDark, themeIconLight));
     searchBox?.addEventListener('input', (e) => {
       this._filterComponents(e.target.value);
@@ -323,6 +333,12 @@ class App {
       const paused = this.la?.togglePause();
       if (btn) btn.textContent = paused ? 'Resume' : 'Pause';
       if (statusEl) statusEl.textContent = paused ? 'Paused' : 'Running';
+    });
+    document.getElementById('btn-la-export-vcd')?.addEventListener('click', () => {
+      this.la?.exportVCD();
+    });
+    document.getElementById('btn-la-export-csv')?.addEventListener('click', () => {
+      this.la?.exportCSV();
     });
     document.getElementById('la-timebase')?.addEventListener('change', (e) => this.la?.setTimebase(e.target.value));
     document.querySelectorAll('.la-ch-select').forEach(sel => {
@@ -530,7 +546,10 @@ class App {
       // Initial sync — if already in placing mode from a previous session
       this.canvas.onPlacingChanged(this.canvas.placingType != null);
       this.canvas.onContextMenu = (inst, x, y) => this._showContextMenu(inst, x, y);
-      this.canvas.onSelectionChange = (state) => this._updateMobileCanvasActions(state);
+      this.canvas.onSelectionChange = (state) => {
+        this._updateMobileCanvasActions(state);
+        this._updateWireQuickPalette(state);
+      };
       this._refreshCanvasSummary();
     }
   }
@@ -871,13 +890,16 @@ class App {
   _bindBoard2TabUI() {
     const board1Btn = document.getElementById('board-tab-1');
     const board2Btn = document.getElementById('board-tab-2');
-    const board2Area = document.getElementById('board2-editor-area');
 
     if (board1Btn) {
       board1Btn.addEventListener('click', () => this._switchToBoard(0));
     }
     if (board2Btn) {
       board2Btn.addEventListener('click', () => this._switchToBoard(1));
+    }
+
+    if (typeof window !== 'undefined' && window.monaco) {
+      this._initBoard2Monaco();
     }
 
     const textarea = document.getElementById('board2-code-textarea');
@@ -892,6 +914,50 @@ class App {
       });
       update();
     }
+  }
+
+  _initBoard2Monaco() {
+    const container = document.getElementById('board2-monaco-container');
+    if (!container || !window.monaco) return;
+    if (this.board2Editor) return;
+
+    const isLight = document.body.classList.contains('light-theme');
+    const themeName = isLight ? 'arduino-light' : 'arduino-dark';
+
+    this.board2Editor = window.monaco.editor.create(container, {
+      value: this._board2Code || this._getDefaultBoard2Code(),
+      language: 'arduino',
+      theme: themeName,
+      fontSize: 14,
+      fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+      fontLigatures: true,
+      lineNumbers: 'on',
+      minimap: { enabled: false },
+      scrollBeyondLastLine: false,
+      automaticLayout: true,
+      folding: true,
+      tabSize: 2,
+      insertSpaces: true,
+      mouseWheelZoom: true,
+      cursorBlinking: 'smooth',
+      cursorSmoothCaretAnimation: 'on',
+      smoothScrolling: true
+    });
+
+    this.board2Editor.onDidChangeModelContent(() => {
+      const val = this.board2Editor.getValue();
+      this._board2Code = val;
+      const textarea = document.getElementById('board2-code-textarea');
+      if (textarea) textarea.value = val;
+      if (window.StorageManager) window.StorageManager.markDirty();
+    });
+
+    this.board2Editor.onDidChangeCursorPosition(e => {
+      if (this._activeBoard === 1) {
+        const pos = document.getElementById('editor-cursor');
+        if (pos) pos.textContent = `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
+      }
+    });
   }
 
   _highlightBoard2(textarea, codeEl) {
@@ -955,6 +1021,9 @@ class App {
 
   _setBoard2Code(code) {
     this._board2Code = code || '';
+    if (this.board2Editor) {
+      this.board2Editor.setValue(this._board2Code);
+    }
     const b2ta = document.getElementById('board2-code-textarea');
     if (b2ta) b2ta.value = this._board2Code;
     this._refreshBoard2Highlight();
@@ -978,8 +1047,12 @@ class App {
       this._board1FilesCache = this.editor?.getAllFiles?.() || {};
       this._board1ActiveFile = this.editor?.getActiveFileName?.() || null;
     } else if (this._activeBoard === 1) {
-      const textarea = document.getElementById('board2-code-textarea');
-      if (textarea) this._board2Code = textarea.value;
+      if (this.board2Editor) {
+        this._board2Code = this.board2Editor.getValue();
+      } else {
+        const textarea = document.getElementById('board2-code-textarea');
+        if (textarea) this._board2Code = textarea.value;
+      }
     }
 
     this._activeBoard = idx;
@@ -1003,19 +1076,36 @@ class App {
       if (this.editor?.loadFiles && this._board1FilesCache && Object.keys(this._board1FilesCache).length > 0) {
         this.editor.loadFiles(this._board1FilesCache, this._board1ActiveFile);
       }
+      setTimeout(() => this.editor?.editor?.layout?.(), 20);
     } else {
-      // Switch to Board 2: show textarea
+      // Switch to Board 2: show Monaco editor (or fallback)
       if (board2Area) board2Area.style.display = 'flex';
       if (editorBody) editorBody.style.display = 'none';
-      const textarea = document.getElementById('board2-code-textarea');
-      if (textarea) {
-        textarea.value = this._board2Code || this._getDefaultBoard2Code();
+      if (!this.board2Editor && typeof window !== 'undefined' && window.monaco) {
+        this._initBoard2Monaco();
       }
-      this._refreshBoard2Highlight();
+      if (this.board2Editor) {
+        const code = this._board2Code || this._getDefaultBoard2Code();
+        if (this.board2Editor.getValue() !== code) {
+          this.board2Editor.setValue(code);
+        }
+        setTimeout(() => this.board2Editor?.layout?.(), 20);
+        this.board2Editor.focus();
+      } else {
+        const textarea = document.getElementById('board2-code-textarea');
+        if (textarea) {
+          textarea.value = this._board2Code || this._getDefaultBoard2Code();
+        }
+        this._refreshBoard2Highlight();
+      }
     }
   }
 
   _getBoard2Code() {
+    if (this.board2Editor) {
+      const val = this.board2Editor.getValue();
+      if (val && val.trim().length > 0) return val;
+    }
     const textarea = document.getElementById('board2-code-textarea');
     const fromTextarea = textarea ? textarea.value : '';
     if (fromTextarea && fromTextarea.trim().length > 0) return fromTextarea;
@@ -2876,6 +2966,9 @@ _newProject() {
     body.classList.toggle('dark-theme', darkMode);
     body.classList.toggle('light-theme', !darkMode);
     if (this.editor?.setTheme) this.editor.setTheme(darkMode);
+    if (typeof window !== 'undefined' && window.monaco) {
+      window.monaco.editor?.setTheme(darkMode ? 'arduino-dark' : 'arduino-light');
+    }
     if (iconDark)  iconDark.classList.toggle('hidden', !darkMode);
     if (iconLight) iconLight.classList.toggle('hidden', darkMode);
     try { localStorage.setItem('ardusim-theme', darkMode ? 'arduino-dark' : 'arduino-light'); } catch (e) {}
@@ -2890,6 +2983,9 @@ _newProject() {
     document.body.classList.toggle('dark-theme', darkMode);
     document.body.classList.toggle('light-theme', !darkMode);
     if (this.editor?.setTheme) this.editor.setTheme(darkMode);
+    if (typeof window !== 'undefined' && window.monaco) {
+      window.monaco.editor?.setTheme(darkMode ? 'arduino-dark' : 'arduino-light');
+    }
     if (iconDark)  iconDark.classList.toggle('hidden', !darkMode);
     if (iconLight) iconLight.classList.toggle('hidden', darkMode);
   }
@@ -3370,6 +3466,105 @@ _newProject() {
     ['code', 'circuit', 'serial'].forEach(v => {
       const btn = document.getElementById(`btn-view-${v}`);
       if (btn) btn.classList.toggle('active', this._activeView === v);
+    });
+  }
+
+  /* ---------------------- LAYOUT PRESETS ---------------------- */
+  applyLayoutPreset(preset) {
+    document.body.classList.remove('view-code', 'view-circuit', 'view-serial');
+    document.body.classList.remove('layout-default', 'layout-code-focus', 'layout-circuit-focus', 'layout-debug-bench');
+    document.body.classList.remove('canvas-fullscreen', 'editor-fullscreen');
+
+    this._activeView = null;
+    this._activeLayoutPreset = preset;
+
+    const editorPanel = document.getElementById('panel-editor');
+    const compPanel   = document.getElementById('panel-components');
+    const bottomPanel = document.getElementById('bottom-panel');
+    const mainLayout  = document.querySelector('.main-layout');
+    const resizerLeft = document.getElementById('resizer-left');
+    const resizerRight = document.getElementById('resizer-right');
+
+    if (editorPanel) {
+      editorPanel.style.width = '';
+      editorPanel.style.flex = '';
+      editorPanel.classList.remove('collapsed');
+    }
+    if (compPanel) {
+      compPanel.style.width = '';
+      compPanel.style.flex = '';
+      compPanel.classList.remove('collapsed');
+    }
+    if (bottomPanel) {
+      bottomPanel.style.height = '';
+      bottomPanel.classList.remove('collapsed');
+    }
+    if (mainLayout) {
+      mainLayout.style.bottom = '';
+    }
+    if (resizerLeft) resizerLeft.classList.remove('hidden');
+    if (resizerRight) resizerRight.classList.remove('hidden');
+    document.body.classList.remove('bottom-collapsed');
+
+    switch (preset) {
+      case 'code':
+      case 'code-focus':
+        document.body.classList.add('layout-code-focus');
+        if (compPanel) compPanel.classList.add('collapsed');
+        if (resizerRight) resizerRight.classList.add('hidden');
+        if (bottomPanel) bottomPanel.classList.add('collapsed');
+        document.body.classList.add('bottom-collapsed');
+        break;
+
+      case 'circuit':
+      case 'circuit-focus':
+        document.body.classList.add('layout-circuit-focus');
+        if (editorPanel) editorPanel.classList.add('collapsed');
+        if (resizerLeft) resizerLeft.classList.add('hidden');
+        if (bottomPanel) bottomPanel.classList.add('collapsed');
+        document.body.classList.add('bottom-collapsed');
+        break;
+
+      case 'debug':
+      case 'debug-bench':
+        document.body.classList.add('layout-debug-bench');
+        if (compPanel) compPanel.classList.add('collapsed');
+        if (resizerRight) resizerRight.classList.add('hidden');
+        if (bottomPanel) {
+          bottomPanel.classList.remove('collapsed');
+          const h = Math.round(window.innerHeight * 0.42);
+          bottomPanel.style.height = `${h}px`;
+          if (mainLayout) mainLayout.style.bottom = `${h}px`;
+        }
+        break;
+
+      case 'default':
+      default:
+        document.body.classList.add('layout-default');
+        this._restoreResizedLayout();
+        break;
+    }
+
+    this._updateLayoutPresetUI(preset);
+    this._updateViewButtons();
+
+    setTimeout(() => {
+      window.EditorManager?.editor?.layout?.();
+      this.board2Editor?.layout?.();
+      this.canvas?.resize?.();
+    }, 40);
+  }
+
+  _updateLayoutPresetUI(activePreset) {
+    const map = {
+      'default': 'btn-layout-default',
+      'code': 'btn-layout-code',
+      'circuit': 'btn-layout-circuit',
+      'debug': 'btn-layout-debug'
+    };
+    Object.entries(map).forEach(([key, btnId]) => {
+      const btn = document.getElementById(btnId);
+      if (btn) btn.classList.toggle('active', key === activePreset);
     });
   }
 
@@ -4683,6 +4878,355 @@ _newProject() {
 
     bar.classList.add('hidden');
     bar.innerHTML = '';
+  }
+
+  /* ---------------------- WIRE QUICK PALETTE ---------------------- */
+  _initWireQuickPalette() {
+    const palette = document.getElementById('wire-quick-palette');
+    if (!palette) return;
+
+    // Swatches
+    palette.querySelectorAll('.wire-color-swatch').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const color = btn.dataset.color;
+        const wire = this.canvas?.selectedWire;
+        if (wire) {
+          this.canvas.setWireColor(wire.id, color);
+          this._updateWireQuickPalette({ selectedWire: this.canvas.selectedWire });
+        }
+      });
+    });
+
+    // Style toggle
+    const styleBtn = document.getElementById('btn-wire-toggle-style');
+    styleBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const wire = this.canvas?.selectedWire;
+      if (!wire) return;
+      const curStyle = wire.routeStyle || 'orthogonal';
+      const nextStyle = curStyle === 'bezier' ? 'orthogonal' : 'bezier';
+      this.canvas.setWireStyle(wire.id, nextStyle);
+      this._updateWireQuickPalette({ selectedWire: this.canvas.selectedWire });
+    });
+
+    // Delete
+    const delBtn = document.getElementById('btn-wire-quick-delete');
+    delBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const wire = this.canvas?.selectedWire;
+      if (wire) {
+        this.canvas.removeWire(wire.id);
+        this.canvas.deselectAll();
+      }
+    });
+
+    // Close
+    const closeBtn = document.getElementById('btn-wire-quick-close');
+    closeBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.canvas?.deselectAll();
+    });
+  }
+
+  _updateWireQuickPalette(state) {
+    const palette = document.getElementById('wire-quick-palette');
+    if (!palette) return;
+
+    const wire = state?.selectedWire || this.canvas?.selectedWire;
+    if (!wire) {
+      palette.classList.add('hidden');
+      return;
+    }
+
+    palette.classList.remove('hidden');
+
+    // Update active color swatch
+    const curColor = wire.color || '';
+    palette.querySelectorAll('.wire-color-swatch').forEach(btn => {
+      const match = curColor && btn.dataset.color.toLowerCase() === curColor.toLowerCase();
+      btn.classList.toggle('active', !!match);
+    });
+
+    // Update style text
+    const styleText = document.getElementById('wire-quick-style-text');
+    if (styleText) {
+      styleText.textContent = (wire.routeStyle === 'bezier') ? 'Curved' : 'Orthogonal';
+    }
+  }
+
+  /* ---------------------- COMMAND PALETTE (Ctrl+K) ---------------------- */
+  _initCommandPalette() {
+    const overlay = document.getElementById('cmd-palette-overlay');
+    const input = document.getElementById('cmd-palette-input');
+    const results = document.getElementById('cmd-palette-results');
+    const hdrBtn = document.getElementById('btn-hdr-cmd-palette');
+    const menuBtn = document.getElementById('btn-menu-cmd-palette');
+
+    if (!overlay || !input || !results) return;
+
+    this._cmdPaletteSelectedIdx = 0;
+    this._cmdPaletteFiltered = [];
+
+    hdrBtn?.addEventListener('click', () => this._openCommandPalette());
+    menuBtn?.addEventListener('click', () => {
+      this._closeHeaderDropdowns();
+      this._openCommandPalette();
+    });
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) this._closeCommandPalette();
+    });
+
+    input.addEventListener('input', () => {
+      this._cmdPaletteSelectedIdx = 0;
+      this._renderCommandPaletteResults(input.value);
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (this._cmdPaletteFiltered.length > 0) {
+          this._cmdPaletteSelectedIdx = (this._cmdPaletteSelectedIdx + 1) % this._cmdPaletteFiltered.length;
+          this._updateCommandPaletteSelection();
+        }
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (this._cmdPaletteFiltered.length > 0) {
+          this._cmdPaletteSelectedIdx = (this._cmdPaletteSelectedIdx - 1 + this._cmdPaletteFiltered.length) % this._cmdPaletteFiltered.length;
+          this._updateCommandPaletteSelection();
+        }
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const selected = this._cmdPaletteFiltered[this._cmdPaletteSelectedIdx];
+        if (selected) {
+          this._executeCommand(selected);
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        this._closeCommandPalette();
+      }
+    });
+
+    // Global shortcut Ctrl+K / Cmd+K
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (overlay.classList.contains('hidden')) {
+          this._openCommandPalette();
+        } else {
+          this._closeCommandPalette();
+        }
+      }
+    }, true);
+  }
+
+  _getCommandPaletteCommands() {
+    const list = [
+      // Actions
+      { id: 'run', title: 'Run Simulation', subtitle: 'Compile and start running', category: 'action', shortcut: 'F5', run: () => this.run() },
+      { id: 'pause', title: 'Pause / Resume Simulation', subtitle: 'Pause or resume execution', category: 'action', shortcut: 'F7', run: () => this.pauseResume() },
+      { id: 'stop', title: 'Stop Simulation', subtitle: 'Halt running microcontroller and reset state', category: 'action', run: () => this.stop() },
+      { id: 'compile', title: 'Compile / Verify Sketch', subtitle: 'Verify syntax and check compile errors', category: 'action', shortcut: 'Ctrl+R', run: () => this.compile() },
+      { id: 'format', title: 'Format Code', subtitle: 'Reformat sketch with standard indentation', category: 'action', shortcut: 'Alt+Shift+F', run: () => window.EditorManager?.formatCode?.() },
+      { id: 'fit-view', title: 'Fit Circuit to View', subtitle: 'Reset zoom and center circuit', category: 'action', shortcut: 'F', run: () => this.canvas?.fitView?.() },
+      { id: 'toggle-minimap', title: 'Toggle Canvas Mini-Map Navigator', subtitle: 'Show or hide circuit overview thumbnail', category: 'action', shortcut: 'M', run: () => this.canvas?.toggleMinimap?.() },
+      { id: 'clear-canvas', title: 'Clear Circuit Canvas', subtitle: 'Remove all components and wires', category: 'action', run: () => this.clearCanvas() },
+      { id: 'export-png', title: 'Export Circuit as PNG', subtitle: 'Download high-res schematic image', category: 'action', run: () => this.exportImage() },
+      { id: 'save-project', title: 'Save Project', subtitle: 'Save sketch and circuit to local library', category: 'action', shortcut: 'Ctrl+S', run: () => this.saveProject() },
+      { id: 'download-json', title: 'Download Project (JSON)', subtitle: 'Export project file to computer', category: 'action', shortcut: 'Ctrl+Shift+S', run: () => this.downloadProject() },
+      { id: 'download-zip', title: 'Download Project as ZIP', subtitle: 'Package source, circuit, and libraries', category: 'action', run: () => this.downloadProjectZip() },
+      { id: 'examples', title: 'Browse Example Projects', subtitle: 'Open library of built-in sample sketches', category: 'action', run: () => this._showModal('modal-examples') },
+      { id: 'shortcuts', title: 'Show Keyboard Shortcuts', subtitle: 'Quick reference guide', category: 'action', run: () => this._showModal('modal-shortcuts') },
+      { id: 'toggle-theme', title: 'Toggle Theme (Dark / Light)', subtitle: 'Switch between dark and light modes', category: 'action', run: () => {
+        const iconDark = document.getElementById('theme-icon-dark');
+        const iconLight = document.getElementById('theme-icon-light');
+        this._toggleTheme(iconDark, iconLight);
+      }},
+
+      // Layout Presets
+      { id: 'layout-default', title: 'Layout: Default', subtitle: 'Balanced 3-panel split view', category: 'layout', run: () => this.applyLayoutPreset('default') },
+      { id: 'layout-code', title: 'Layout: Code Focus', subtitle: 'Wide Monaco editor with compact canvas', category: 'layout', run: () => this.applyLayoutPreset('code') },
+      { id: 'layout-circuit', title: 'Layout: Circuit Focus', subtitle: 'Maximized circuit canvas and component drawer', category: 'layout', run: () => this.applyLayoutPreset('circuit') },
+      { id: 'layout-debug', title: 'Layout: Debug Bench', subtitle: 'Code & canvas + expanded diagnostic bench', category: 'layout', run: () => this.applyLayoutPreset('debug') },
+
+      // Target Boards
+      { id: 'board-uno', title: 'Target: Arduino Uno', subtitle: 'ATmega328P @ 16MHz', category: 'board', run: () => this._setBoard('arduino_uno') },
+      { id: 'board-esp32', title: 'Target: ESP32 DevKit V1', subtitle: 'Dual-core Xtensa LX6 with WiFi & Bluetooth', category: 'board', run: () => this._setBoard('esp32_devkit_v1') },
+      { id: 'board-nano', title: 'Target: Arduino Nano', subtitle: 'ATmega328P compact board', category: 'board', run: () => this._setBoard('arduino_nano') },
+      { id: 'board-pico', title: 'Target: Raspberry Pi Pico 2 W', subtitle: 'RP2350 dual Arm Cortex-M33 with Wi-Fi', category: 'board', run: () => this._setBoard('pico2w') },
+      { id: 'board-stm32', title: 'Target: STM32F746G Discovery', subtitle: 'ARM Cortex-M7 with TFT display', category: 'board', run: () => this._setBoard('stm32f746_disco') },
+      { id: 'board-lpc', title: 'Target: LPC2148 SmartX Board', subtitle: 'ARM7TDMI-S microcontroller', category: 'board', run: () => this._setBoard('lpc2148') },
+      { id: 'board-8085', title: 'Target: Intel 8085', subtitle: 'Classic 8-bit microprocessor', category: 'board', run: () => this._setBoard('intel_8085') },
+      { id: 'board-8051', title: 'Target: Intel 8051', subtitle: 'Standard MCS-51 microcontroller', category: 'board', run: () => this._setBoard('intel_8051') },
+      { id: 'board-plc', title: 'Target: Industrial PLC (Ardu-PLC)', subtitle: 'Ladder logic PLC runtime', category: 'board', run: () => this._setBoard('industrial_plc') },
+
+      // Instruments
+      { id: 'inst-serial', title: 'Open Serial Monitor', subtitle: 'UART terminal communication', category: 'instrument', run: () => {
+        const tab = document.getElementById('tab-serial');
+        if (tab) this._switchBottomTab(tab);
+      }},
+      { id: 'inst-output', title: 'Open Output Log', subtitle: 'Compile and system messages', category: 'instrument', run: () => {
+        const tab = document.getElementById('tab-output');
+        if (tab) this._switchBottomTab(tab);
+      }},
+      { id: 'inst-osc', title: 'Open Oscilloscope', subtitle: 'Dual-channel signal waveform view', category: 'instrument', run: () => {
+        const tab = document.getElementById('tab-oscilloscope');
+        if (tab) this._switchBottomTab(tab);
+      }},
+      { id: 'inst-la', title: 'Open Logic Analyzer', subtitle: 'Multi-channel digital waveform capture', category: 'instrument', run: () => {
+        const tab = document.getElementById('tab-logic-analyzer');
+        if (tab) this._switchBottomTab(tab);
+      }},
+      { id: 'inst-plotter', title: 'Open Serial Plotter', subtitle: 'Real-time telemetry graph', category: 'instrument', run: () => {
+        const tab = document.getElementById('tab-plotter');
+        if (tab) this._switchBottomTab(tab);
+      }},
+      { id: 'inst-pins', title: 'Open Pin Monitor', subtitle: 'Microcontroller pin state matrix', category: 'instrument', run: () => {
+        const tab = document.getElementById('tab-pins');
+        if (tab) this._switchBottomTab(tab);
+      }},
+      { id: 'inst-registers', title: 'Open Registers View', subtitle: 'MCU internal registers inspector', category: 'instrument', run: () => {
+        const tab = document.getElementById('tab-registers');
+        if (tab) this._switchBottomTab(tab);
+      }},
+      { id: 'inst-memory', title: 'Open Memory View', subtitle: 'RAM and Flash memory hex dump', category: 'instrument', run: () => {
+        const tab = document.getElementById('tab-memory');
+        if (tab) this._switchBottomTab(tab);
+      }},
+      { id: 'export-la-vcd', title: 'Export Logic Analyzer (VCD)', subtitle: 'Value Change Dump for PulseView / GTKWave', category: 'instrument', run: () => this.la?.exportVCD() },
+      { id: 'export-la-csv', title: 'Export Logic Analyzer (CSV)', subtitle: 'Export multi-channel digital waveform capture', category: 'instrument', run: () => this.la?.exportCSV() },
+      { id: 'export-osc-csv', title: 'Export Oscilloscope (CSV)', subtitle: 'Export dual-channel analog waveform traces', category: 'instrument', run: () => this.osc?.exportCSV() }
+    ];
+
+    // Add components from COMPONENT_DEFS
+    const defs = window.ArduinoComponents?.COMPONENT_DEFS || {};
+    Object.entries(defs).forEach(([type, def]) => {
+      const name = def.name || type;
+      list.push({
+        id: `comp-${type}`,
+        title: `Add ${name}`,
+        subtitle: `Place ${name} on circuit canvas`,
+        category: 'component',
+        type: type,
+        run: () => {
+          this.canvas?.startPlacing?.(type);
+        }
+      });
+    });
+
+    return list;
+  }
+
+  _openCommandPalette() {
+    const overlay = document.getElementById('cmd-palette-overlay');
+    const input = document.getElementById('cmd-palette-input');
+    if (!overlay || !input) return;
+
+    overlay.classList.remove('hidden');
+    input.value = '';
+    this._cmdPaletteSelectedIdx = 0;
+    this._renderCommandPaletteResults('');
+    setTimeout(() => input.focus(), 20);
+  }
+
+  _closeCommandPalette() {
+    const overlay = document.getElementById('cmd-palette-overlay');
+    if (overlay) overlay.classList.add('hidden');
+  }
+
+  _renderCommandPaletteResults(query) {
+    const results = document.getElementById('cmd-palette-results');
+    if (!results) return;
+
+    const all = this._getCommandPaletteCommands();
+    const q = (query || '').trim().toLowerCase();
+
+    const filtered = q ? all.filter(c => {
+      return c.title.toLowerCase().includes(q) ||
+             (c.subtitle && c.subtitle.toLowerCase().includes(q)) ||
+             (c.category && c.category.toLowerCase().includes(q));
+    }) : all.slice(0, 30);
+
+    this._cmdPaletteFiltered = filtered;
+    if (this._cmdPaletteSelectedIdx >= filtered.length) {
+      this._cmdPaletteSelectedIdx = Math.max(0, filtered.length - 1);
+    }
+
+    if (filtered.length === 0) {
+      results.innerHTML = `<div class="cmd-palette-empty">No commands or components matching "${this._escHtml(query)}"</div>`;
+      return;
+    }
+
+    const badgeClasses = {
+      'action': 'badge-action',
+      'component': 'badge-comp',
+      'layout': 'badge-layout',
+      'board': 'badge-board',
+      'instrument': 'badge-inst'
+    };
+
+    results.innerHTML = filtered.map((item, idx) => {
+      const isActive = idx === this._cmdPaletteSelectedIdx;
+      const bClass = badgeClasses[item.category] || 'badge-action';
+      const bLabel = item.category.slice(0, 4);
+      return `
+        <div class="cmd-palette-item ${isActive ? 'active' : ''}" data-idx="${idx}" role="option" aria-selected="${isActive}">
+          <div class="cmd-palette-item-left">
+            <span class="cmd-palette-badge ${bClass}">${bLabel}</span>
+            <span class="cmd-palette-item-title">${this._escHtml(item.title)}</span>
+            ${item.subtitle ? `<span class="cmd-palette-item-subtitle">${this._escHtml(item.subtitle)}</span>` : ''}
+          </div>
+          ${item.shortcut ? `<span class="cmd-palette-shortcut"><kbd>${item.shortcut}</kbd></span>` : ''}
+        </div>
+      `;
+    }).join('');
+
+    results.querySelectorAll('.cmd-palette-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const idx = parseInt(el.dataset.idx, 10);
+        const item = this._cmdPaletteFiltered[idx];
+        if (item) this._executeCommand(item);
+      });
+      el.addEventListener('mouseenter', () => {
+        this._cmdPaletteSelectedIdx = parseInt(el.dataset.idx, 10);
+        this._updateCommandPaletteSelection();
+      });
+    });
+
+    this._scrollCommandPaletteSelectionIntoView();
+  }
+
+  _updateCommandPaletteSelection() {
+    const results = document.getElementById('cmd-palette-results');
+    if (!results) return;
+    results.querySelectorAll('.cmd-palette-item').forEach((el, idx) => {
+      const isActive = idx === this._cmdPaletteSelectedIdx;
+      el.classList.toggle('active', isActive);
+      el.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+    this._scrollCommandPaletteSelectionIntoView();
+  }
+
+  _scrollCommandPaletteSelectionIntoView() {
+    const results = document.getElementById('cmd-palette-results');
+    const active = results?.querySelector('.cmd-palette-item.active');
+    if (active && results) {
+      active.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  _executeCommand(item) {
+    this._closeCommandPalette();
+    try {
+      if (typeof item.run === 'function') {
+        item.run();
+      }
+    } catch (err) {
+      console.error('[ArduSim] Command palette execute error:', err);
+      this.showToast?.(`Error running command: ${err.message || err}`, 'error');
+    }
   }
 }
 
