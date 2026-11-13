@@ -40,6 +40,7 @@ window.CppTypes = {
     'Stream',
     'Print',
     'HardwareSerial',
+    'EspClass',
     'TwoWire',
     'SPIClass',
     'Servo',

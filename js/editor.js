@@ -302,6 +302,8 @@ DL2:    DJNZ R3, DL2
           { label: 'esp_now_send', kind: monaco.languages.CompletionItemKind.Function, insertTextRules: 4, insertText: 'esp_now_send(${1:macAddress}, (uint8_t *)&${2:data}, sizeof(${2:data}));' },
           { label: 'WiFi.mode', kind: monaco.languages.CompletionItemKind.Function, insertTextRules: 4, insertText: 'WiFi.mode(WIFI_STA);' },
           { label: 'WiFi.macAddress', kind: monaco.languages.CompletionItemKind.Function, insertTextRules: 4, insertText: 'WiFi.macAddress()' },
+          { label: 'ESP.restart', kind: monaco.languages.CompletionItemKind.Function, insertTextRules: 4, insertText: 'ESP.restart();', documentation: 'Restart the ESP microcontroller' },
+          { label: 'esp_restart', kind: monaco.languages.CompletionItemKind.Function, insertTextRules: 4, insertText: 'esp_restart();', documentation: 'Restart the ESP microcontroller (ESP-IDF)' },
         ];
 
         // Dynamically add library classes and include hints
@@ -1837,6 +1839,7 @@ DL2:    DJNZ R3, DL2
    */
   _detectVarType(code, varName) {
     if (!code || !varName) return null;
+    if (varName === 'ESP') return 'ESP';
 
     // Pattern: TypeName varName(...)
     // Matches: LiquidCrystal lcd(...), Servo myServo(...), DHT dht(...), etc.
@@ -1866,6 +1869,24 @@ DL2:    DJNZ R3, DL2
    */
   _getInstanceMethods(typeName) {
     const METHOD_MAP = {
+      ESP: [
+        { name: 'restart', snippet: 'restart()', doc: 'Restart the ESP microcontroller' },
+        { name: 'reset', snippet: 'reset()', doc: 'Reset the ESP microcontroller' },
+        { name: 'getFreeHeap', snippet: 'getFreeHeap()', doc: 'Get available free heap memory in bytes' },
+        { name: 'getHeapSize', snippet: 'getHeapSize()', doc: 'Get total heap size in bytes' },
+        { name: 'getMinFreeHeap', snippet: 'getMinFreeHeap()', doc: 'Get lowest level of free heap since boot' },
+        { name: 'getMaxAllocHeap', snippet: 'getMaxAllocHeap()', doc: 'Get largest allocable block in bytes' },
+        { name: 'getChipRevision', snippet: 'getChipRevision()', doc: 'Get chip revision' },
+        { name: 'getChipModel', snippet: 'getChipModel()', doc: 'Get chip model string' },
+        { name: 'getChipCores', snippet: 'getChipCores()', doc: 'Get number of CPU cores' },
+        { name: 'getCpuFreqMHz', snippet: 'getCpuFreqMHz()', doc: 'Get CPU frequency in MHz' },
+        { name: 'getCycleCount', snippet: 'getCycleCount()', doc: 'Get CPU cycle count' },
+        { name: 'getFlashChipSize', snippet: 'getFlashChipSize()', doc: 'Get flash chip size in bytes' },
+        { name: 'getFlashChipSpeed', snippet: 'getFlashChipSpeed()', doc: 'Get flash chip speed in Hz' },
+        { name: 'getSdkVersion', snippet: 'getSdkVersion()', doc: 'Get ESP-IDF SDK version string' },
+        { name: 'getEfuseMac', snippet: 'getEfuseMac()', doc: 'Get 64-bit MAC address' },
+        { name: 'deepSleep', snippet: 'deepSleep(${1:timeUs})', doc: 'Enter deep sleep for specified microseconds' },
+      ],
       LiquidCrystal: [
         { name: 'begin', snippet: 'begin(${1:cols}, ${2:rows})', doc: 'Initialize the LCD (cols, rows)' },
         { name: 'setCursor', snippet: 'setCursor(${1:col}, ${2:row})', doc: 'Set the cursor position' },

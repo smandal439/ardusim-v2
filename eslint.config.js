@@ -17,6 +17,7 @@ const projectGlobals = {
   // Core simulator objects
   ArduinoSim: 'readonly',
   ArduinoSimulator: 'readonly',
+  ArduinoComponents: 'readonly',
   CircuitCanvas: 'readonly',
   App: 'readonly',
   EditorManager: 'readonly',

@@ -26,6 +26,7 @@ window.ArduinoLibs['FreeRTOS'] = {
     '<freertos/timers.h>',
     '<esp_sleep.h>',
     '<esp_system.h>',
+    '<Esp.h>',
   ],
 
   transpile: [
@@ -95,6 +96,28 @@ window.ArduinoLibs['FreeRTOS'] = {
     [/(?<!\.)xEventGroupClearBits\s*\(/g, '_a.xEventGroupClearBits('],
     [/(?<!\.)xEventGroupWaitBits\s*\(/g, 'await _a.xEventGroupWaitBits('],
     [/(?<!\.)xEventGroupGetBits\s*\(/g, '_a.xEventGroupGetBits('],
+
+    // ── ESP restart & system API
+    [/(?<!\.)esp_restart\s*\(/g, '_a.esp_restart('],
+    [/\bESP\.restart\s*\(\s*\)/g, '_a.esp_restart()'],
+    [/\bESP\.reset\s*\(\s*\)/g, '_a.esp_restart()'],
+    [/\bESP\.deepSleep\s*\(/g, '_a.esp_deep_sleep('],
+    [/\bESP\.getFreeHeap\s*\(\s*\)/g, '_a.esp_getFreeHeap()'],
+    [/\bESP\.getHeapSize\s*\(\s*\)/g, '_a.esp_getHeapSize()'],
+    [/\bESP\.getMinFreeHeap\s*\(\s*\)/g, '_a.esp_getMinFreeHeap()'],
+    [/\bESP\.getMaxAllocHeap\s*\(\s*\)/g, '_a.esp_getMaxAllocHeap()'],
+    [/\bESP\.getChipRevision\s*\(\s*\)/g, '_a.esp_getChipRevision()'],
+    [/\bESP\.getChipModel\s*\(\s*\)/g, '_a.esp_getChipModel()'],
+    [/\bESP\.getChipCores\s*\(\s*\)/g, '_a.esp_getChipCores()'],
+    [/\bESP\.getCpuFreqMHz\s*\(\s*\)/g, '_a.esp_getCpuFreqMHz()'],
+    [/\bESP\.getCycleCount\s*\(\s*\)/g, '_a.esp_getCycleCount()'],
+    [/\bESP\.getFlashChipSize\s*\(\s*\)/g, '_a.esp_getFlashChipSize()'],
+    [/\bESP\.getFlashChipSpeed\s*\(\s*\)/g, '_a.esp_getFlashChipSpeed()'],
+    [/\bESP\.getFlashChipMode\s*\(\s*\)/g, '_a.esp_getFlashChipMode()'],
+    [/\bESP\.getSdkVersion\s*\(\s*\)/g, '_a.esp_getSdkVersion()'],
+    [/\bESP\.getEfuseMac\s*\(\s*\)/g, '_a.esp_getEfuseMac()'],
+    [/\bESP\.getSketchSize\s*\(\s*\)/g, '_a.esp_getSketchSize()'],
+    [/\bESP\.getFreeSketchSpace\s*\(\s*\)/g, '_a.esp_getFreeSketchSpace()'],
 
     // ── ESP32 deep sleep API (they throw ESP_DEEPSLEEP to abort the current
     //    boot, so they are synchronous — no await).
@@ -748,7 +771,7 @@ window.ArduinoLibs['FreeRTOS'] = {
 
       _freertosRunCore: async function(coreId) {
         var spinGuard = 0;
-        while (self.isRunning && !self._deepsleepPending) {
+        while (self.isRunning && !self._deepsleepPending && !self._restartPending) {
           if (self._freertosSuspended) {
             await new Promise(function(r) { setTimeout(r, 1); });
             continue;
@@ -791,7 +814,7 @@ window.ArduinoLibs['FreeRTOS'] = {
                   task._promise = null;
                   return;
                 }
-                if (e && e.isDeepSleep) {
+                if (e && (e.isDeepSleep || e.isRestart)) {
                   // Deep sleep was requested from inside this task — the
                   // scheduler loop exits via self._deepsleepPending.
                   task.state = 'terminated';

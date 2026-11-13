@@ -8,6 +8,8 @@ class ArduinoSimulator {
   constructor() {
     this.isRunning = false;
     this.isPaused = false;
+    this._restartPending = false;
+    this._restartPending = false;
     this.simTime = 0; // ms
     this.speed = 1;
     this.board = 'arduino_uno'; // arduino_uno | esp32_devkit_v1
@@ -428,9 +430,10 @@ class ArduinoSimulator {
     js = js.replace(/\bstruct\s+\w+\s*\{[^}]*\}\s*;/g, '');
     // struct Name varName; -> var varName = {};
     js = js.replace(/\bstruct\s+(\w+)\s+(\w+)\s*;/g, 'var $2 = {};');
+    js = js.replace(/\b(?:extern\s+)?EspClass\s+ESP\s*;/g, '/* EspClass ESP; */');
     // PascalCaseTypeName varName; -> var varName = {};  (catches struct/class instances like DataPacket myData;)
     js = js.replace(/\b([A-Z]\w+)\s+(\w+)\s*;/g, function (match, typeName, varName) {
-      if (/^(Serial|Wire|SPI|WiFi|WiFiClient|EEPROM|Stream|Print|HardwareSerial|Serial1|Serial2)$/.test(typeName)) return match;
+      if (/^(Serial|Wire|SPI|WiFi|WiFiClient|EEPROM|Stream|Print|HardwareSerial|Serial1|Serial2|EspClass)$/.test(typeName)) return match;
       if (/^(If|Else|For|While|Do|Switch|Case|Return|Function|Var|Let|Const|Import|Export|New|Delete|Try|Catch|Finally|Throw|Async|Await|Yield|Static|Super|With|Debugger|In|Of|This|Void|Typeof|Instanceof|Null|Undefined|True|False|Break|Continue|Default)$/.test(typeName)) return match;
       return 'var ' + varName + ' = {};';
     });
@@ -1337,6 +1340,58 @@ class ArduinoSimulator {
           return n * n;
         },
 
+        /* ESP32 / ESP system control */
+        esp_restart() {
+          self._serialLog('[ESP] Restarting system...\n', 'system');
+          self._restartPending = true;
+          const err = new Error('ESP_RESTART');
+          err.isRestart = true;
+          throw err;
+        },
+        esp_getFreeHeap() { return 294912; },
+        esp_getHeapSize() { return 327680; },
+        esp_getMinFreeHeap() { return 262144; },
+        esp_getMaxAllocHeap() { return 114688; },
+        esp_getChipRevision() { return 1; },
+        esp_getChipModel() { return 'ESP32-D0WDQ6'; },
+        esp_getChipCores() { return 2; },
+        esp_getCpuFreqMHz() { return 240; },
+        esp_getCycleCount() { return (Math.floor((self.simTime || 0) * 240000) >>> 0); },
+        esp_getFlashChipSize() { return 4194304; },
+        esp_getFlashChipSpeed() { return 80000000; },
+        esp_getFlashChipMode() { return 0; },
+        esp_getSdkVersion() { return 'v4.4.4'; },
+        esp_getEfuseMac() { return 0x240AC4112233n; },
+        esp_getSketchSize() { return 245760; },
+        esp_getFreeSketchSpace() { return 1048576; },
+      },
+      esp_restart: function () { return (self._a || result._a).esp_restart(); },
+      ESP: {
+        restart() { return (self._a || result._a).esp_restart(); },
+        reset() { return (self._a || result._a).esp_restart(); },
+        getFreeHeap() { return (self._a || result._a).esp_getFreeHeap(); },
+        getHeapSize() { return (self._a || result._a).esp_getHeapSize(); },
+        getMinFreeHeap() { return (self._a || result._a).esp_getMinFreeHeap(); },
+        getMaxAllocHeap() { return (self._a || result._a).esp_getMaxAllocHeap(); },
+        getChipRevision() { return (self._a || result._a).esp_getChipRevision(); },
+        getChipModel() { return (self._a || result._a).esp_getChipModel(); },
+        getChipCores() { return (self._a || result._a).esp_getChipCores(); },
+        getCpuFreqMHz() { return (self._a || result._a).esp_getCpuFreqMHz(); },
+        getCycleCount() { return (self._a || result._a).esp_getCycleCount(); },
+        getFlashChipSize() { return (self._a || result._a).esp_getFlashChipSize(); },
+        getFlashChipSpeed() { return (self._a || result._a).esp_getFlashChipSpeed(); },
+        getFlashChipMode() { return (self._a || result._a).esp_getFlashChipMode(); },
+        getSdkVersion() { return (self._a || result._a).esp_getSdkVersion(); },
+        getEfuseMac() { return (self._a || result._a).esp_getEfuseMac(); },
+        getSketchSize() { return (self._a || result._a).esp_getSketchSize(); },
+        getFreeSketchSpace() { return (self._a || result._a).esp_getFreeSketchSpace(); },
+        deepSleep(us) {
+          const _a = self._a || result._a;
+          if (_a && typeof _a.esp_deep_sleep === 'function') {
+            return _a.esp_deep_sleep(us);
+          }
+          return 0;
+        },
       },
 
       /* Global constants */
@@ -1826,6 +1881,7 @@ class ArduinoSimulator {
 
     // Expose _idiv as a top-level function for integer division (C++ int / int -> truncation)
     result._idiv = result._a._idiv;
+    self._a = result._a;
 
     return result;
   }
@@ -1976,6 +2032,8 @@ class ArduinoSimulator {
     this._deepsleepWakeupCause = 0;
     this._deepsleepCount = 0;
     this._deepsleepPending = null;
+    this._restartPending = false;
+    this._restartCount = 0;
     this._deepsleepTimerUs = 0;
     this._deepsleepExt0 = null;
     this._deepsleepExt1 = null;
@@ -2085,7 +2143,7 @@ class ArduinoSimulator {
           } else {
             // Run loop repeatedly (original behavior)
             let _lastLoopTime = performance.now();
-            while (this.isRunning && runId === this._runSeq && !this._deepsleepPending) {
+            while (this.isRunning && runId === this._runSeq && !this._deepsleepPending && !this._restartPending) {
               if (this.isPaused) {
                 await new Promise(resolve => { this._resumeResolve = resolve; });
                 _lastLoopTime = performance.now();
@@ -2117,8 +2175,14 @@ class ArduinoSimulator {
             }
           }
         } catch (err) {
-          // esp_deep_sleep()/esp_deep_sleep_start() abort the boot by design
-          if (!err || err.message !== 'ESP_DEEPSLEEP') throw err;
+          // esp_deep_sleep()/esp_deep_sleep_start() and ESP.restart() abort the boot by design
+          if (!err || (err.message !== 'ESP_DEEPSLEEP' && err.message !== 'ESP_RESTART')) throw err;
+        }
+
+        if (this._restartPending) {
+          if (!(await this._handleRestart(runId))) break;
+          ctx = fn(...vals);
+          continue;
         }
 
         if (!this._deepsleepPending) break;
@@ -2218,6 +2282,36 @@ class ArduinoSimulator {
     return true;
   }
 
+  /* Handle a software restart (e.g. ESP.restart() or esp_restart()):
+     resets boot-local state, enforces restart loop guard, and prepares
+     for fresh execution of setup(). */
+  async _handleRestart(runId) {
+    if (!this._restartPending) return false;
+    this._restartPending = false;
+    if (runId !== this._runSeq) return false;
+
+    this._restartCount = (this._restartCount || 0) + 1;
+    if (this._restartCount > 100) {
+      this._serialLog('[ESP] Restart limit (100) reached -- stopping simulation\n', 'error');
+      return false;
+    }
+
+    this.simTime += 50;
+    // Small delay to simulate reboot settling time without freezing UI
+    await this._delayPromise(50 / (this.speed || 1));
+    if (runId !== this._runSeq) return false;
+
+    // Boot-local state is wiped, exactly like a real reset
+    this._resetFreertosState();
+    this._delays = [];
+    this._iterSinceDelay = 0;
+    this._interrupts = {};
+    this.pinModes = {};
+    this._prevPinValues = {};
+    this._resetAdaptiveLoopState();
+    return true;
+  }
+
   /* Start execution of already-compiled code (non-blocking, for dual-board parallel run) */
   _startExecution() {
     if (!this._compiledCtx && !this._assemblyMode) return;
@@ -2292,6 +2386,8 @@ class ArduinoSimulator {
     this._deepsleepWakeupCause = 0;
     this._deepsleepCount = 0;
     this._deepsleepPending = null;
+    this._restartPending = false;
+    this._restartCount = 0;
     this._deepsleepTimerUs = 0;
     this._deepsleepExt0 = null;
     this._deepsleepExt1 = null;
@@ -2330,7 +2426,7 @@ class ArduinoSimulator {
             } else {
               // Original behavior // single-threaded loop
               let _lastLoopTime2 = performance.now();
-              while (self.isRunning && runId === self._runSeq && !self._deepsleepPending) {
+              while (self.isRunning && runId === self._runSeq && !self._deepsleepPending && !self._restartPending) {
                 if (self.isPaused) {
                   await new Promise(resolve => { self._resumeResolve = resolve; });
                   _lastLoopTime2 = performance.now();
@@ -2358,8 +2454,14 @@ class ArduinoSimulator {
               }
             }
           } catch (err) {
-            // esp_deep_sleep() aborts the boot by design
-            if (!err || err.message !== 'ESP_DEEPSLEEP') throw err;
+            // esp_deep_sleep() and ESP.restart() abort the boot by design
+            if (!err || (err.message !== 'ESP_DEEPSLEEP' && err.message !== 'ESP_RESTART')) throw err;
+          }
+
+          if (self._restartPending) {
+            if (!(await self._handleRestart(runId))) break;
+            ctx = fn(...vals);
+            continue;
           }
 
           if (!self._deepsleepPending) break;
