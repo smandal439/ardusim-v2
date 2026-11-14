@@ -3535,7 +3535,76 @@ body.file-explorer-collapsed .file-explorer-expand {
 .guide-footer { text-align: center; color: var(--text-muted); font-size: 12px; padding: 10px 0 4px; }
 
 /* Component reference */
-.gc-toolbar { margin-bottom: 18px; }
+.gc-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.gc-toolbar .gc-search-box,
+.gc-toolbar .library-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: border-color var(--trans-fast), box-shadow var(--trans-fast), background var(--trans-fast);
+}
+.gc-toolbar .gc-search-box:focus-within,
+.gc-toolbar .library-search:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0, 151, 156, 0.18);
+  background: var(--bg-surface, var(--bg-card));
+}
+.gc-toolbar .gc-search-box .search-icon,
+.gc-toolbar .library-search svg:not(.search-clear svg) {
+  position: static;
+  color: var(--accent);
+  flex-shrink: 0;
+  transition: filter var(--trans-fast), transform var(--trans-fast);
+}
+.gc-toolbar .gc-search-box:focus-within .search-icon,
+.gc-toolbar .library-search:focus-within svg:not(.search-clear svg) {
+  filter: drop-shadow(0 0 6px var(--accent-subtle, rgba(0, 229, 255, 0.45)));
+  transform: scale(1.05);
+}
+.gc-toolbar .gc-search-box input,
+.gc-toolbar .library-search input {
+  flex: 1;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  outline: none;
+  box-shadow: none;
+  font-size: 13.5px;
+  font-family: inherit;
+  letter-spacing: 0.15px;
+  color: var(--text-primary);
+  min-width: 0;
+}
+.gc-toolbar .gc-search-box input:focus,
+.gc-toolbar .library-search input:focus {
+  border: none;
+  outline: none;
+  box-shadow: none;
+}
+.gc-toolbar .gc-search-box input::placeholder,
+.gc-toolbar .library-search input::placeholder {
+  color: var(--text-muted);
+  transition: color var(--trans-fast);
+}
+.gc-toolbar .gc-search-box input:focus::placeholder,
+.gc-toolbar .library-search input:focus::placeholder {
+  color: var(--text-secondary);
+}
+.gc-toolbar .search-clear {
+  margin-left: auto;
+}
 .gc-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));

@@ -4509,9 +4509,16 @@ class GuideManager {
 
     root.innerHTML = `
       <div class="gc-toolbar">
-        <div class="library-search">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/></svg>
-          <input type="text" id="gc-search" placeholder="Search components—" aria-label="Search components" />
+        <div class="gc-search-box library-search">
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/>
+          </svg>
+          <input type="text" id="gc-search" placeholder="Search components..." aria-label="Search components" autocomplete="off" spellcheck="false" />
+          <span class="search-clear" id="gc-search-clear" title="Clear search" role="button" aria-label="Clear search">
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z" />
+            </svg>
+          </span>
         </div>
         <div class="library-filters" id="gc-filters">
           <button class="filter-chip active" data-filter="all">All</button>
@@ -4531,8 +4538,27 @@ class GuideManager {
       filterBox.appendChild(b);
     });
 
-    root.querySelector('#gc-search').addEventListener('input', (e) => {
+    const searchInput = root.querySelector('#gc-search');
+    const searchClear = root.querySelector('#gc-search-clear');
+
+    if (this._compQuery && searchInput) {
+      searchInput.value = this._compQuery;
+      if (searchClear) searchClear.classList.add('visible');
+    }
+
+    searchInput?.addEventListener('input', (e) => {
       this._compQuery = e.target.value.toLowerCase().trim();
+      if (searchClear) searchClear.classList.toggle('visible', e.target.value.length > 0);
+      this._renderCompGrid(root);
+    });
+
+    searchClear?.addEventListener('click', () => {
+      if (searchInput) {
+        searchInput.value = '';
+        searchInput.focus();
+      }
+      this._compQuery = '';
+      searchClear.classList.remove('visible');
       this._renderCompGrid(root);
     });
     filterBox.addEventListener('click', (e) => {
