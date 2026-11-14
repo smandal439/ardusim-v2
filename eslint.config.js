@@ -32,6 +32,7 @@ const projectGlobals = {
   QRCode: 'readonly',
 
   // Component helpers
+  ComponentSvg: 'readonly',
   getInstPinState: 'readonly',
   getInstPinPWM: 'readonly',
   resistorBands: 'readonly',

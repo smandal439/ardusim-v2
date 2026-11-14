@@ -1596,19 +1596,25 @@ body.file-explorer-collapsed .file-explorer-expand {
   gap: 10px;
   padding: 7px 10px;
   cursor: pointer;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  margin: 1px 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 6px);
+  margin: 3px 6px;
+  background: var(--bg-card);
   transition: all var(--trans-fast);
   user-select: none;
   position: relative;
+  text-align: left;
+  width: calc(100% - 12px);
 }
 .comp-item:hover {
   background: var(--bg-hover);
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  transform: translateY(-1px);
 }
 .comp-item:active {
   background: var(--bg-active);
-  transform: scale(0.98);
+  transform: translateY(0);
 }
 .comp-item.placing {
   background: var(--accent-dim);
@@ -1616,21 +1622,36 @@ body.file-explorer-collapsed .file-explorer-expand {
 }
 
 .comp-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-sm);
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm, 6px);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   font-size: 18px;
-  background: var(--bg-card);
+  background: #0d1218;
   border: 1px solid var(--border-subtle);
-  transition: transform var(--trans-fast);
+  transition: transform var(--trans-fast), border-color var(--trans-fast), box-shadow var(--trans-fast);
+  overflow: hidden;
 }
-.comp-item:hover .comp-icon { transform: scale(1.05); }
+.comp-item:hover .comp-icon {
+  transform: scale(1.06);
+  border-color: var(--accent);
+}
+.comp-icon svg.comp-svg-preview {
+  width: 32px;
+  height: 32px;
+  display: block;
+}
 
 .comp-info { flex: 1; min-width: 0; }
+.comp-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
 .comp-name {
   font-size: 12px;
   font-weight: 600;
@@ -1638,6 +1659,19 @@ body.file-explorer-collapsed .file-explorer-expand {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.comp-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(0, 229, 255, 0.12);
+  color: var(--accent);
+  border: 1px solid rgba(0, 229, 255, 0.25);
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  line-height: 1.2;
+  flex-shrink: 0;
 }
 .comp-desc {
   font-size: 10px;
@@ -1670,22 +1704,29 @@ body.file-explorer-collapsed .file-explorer-expand {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 8px;
+  padding: 6px 8px;
   cursor: pointer;
-  border: none;
-  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 6px);
   background: transparent;
   width: 100%;
   text-align: left;
   color: var(--text-primary);
   font-size: 12px;
-  transition: background var(--trans-fast);
+  transition: all var(--trans-fast);
 }
-.comp-dropdown-item:hover { background: var(--bg-hover); }
+.comp-dropdown-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-subtle);
+}
 .comp-dropdown-item .comp-icon {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   font-size: 14px;
+}
+.comp-dropdown-item .comp-icon svg.comp-svg-preview {
+  width: 26px;
+  height: 26px;
 }
 .comp-dropdown-item .comp-name { font-size: 11px; }
 
@@ -4876,6 +4917,23 @@ body.light-theme .mobile-code-highlight .mobile-token-function { color: #795e26;
   align-items: center;
   gap: 10px;
   overflow: hidden;
+}
+.cmd-palette-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  background: #0d1218;
+  border: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.cmd-palette-item-icon svg {
+  width: 20px;
+  height: 20px;
+  display: block;
 }
 .cmd-palette-item-title {
   font-weight: 500;

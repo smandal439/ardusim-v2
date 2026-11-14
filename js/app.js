@@ -2092,18 +2092,26 @@ _newProject() {
         item.className = 'comp-item comp-dropdown';
         item.dataset.type = dd.id;
         item.title = dd.desc || dd.label;
-        item.innerHTML = `<span class="comp-icon">${this._escHtml(dd.icon || '⚙️')}</span><span class="comp-info"><span class="comp-name">${this._escHtml(dd.label)}</span><span class="comp-desc">${this._escHtml(dd.desc || '')}</span></span><span class="comp-dropdown-arrow">▾</span>`;
+        const svgPreview = window.ComponentSvg ? window.ComponentSvg.getSvg(dd.id, dd) : `<span class="comp-icon-fallback">${this._escHtml(dd.icon || '⚙️')}</span>`;
+        const badge = window.ComponentSvg ? window.ComponentSvg.getBadge(dd.id, dd) : null;
+        const badgeHtml = badge ? `<span class="comp-badge">${this._escHtml(badge)}</span>` : '';
+        item.innerHTML = `<span class="comp-icon">${svgPreview}</span><span class="comp-info"><span class="comp-name-row"><span class="comp-name">${this._escHtml(dd.label)}</span>${badgeHtml}</span><span class="comp-desc">${this._escHtml(dd.desc || '')}</span></span><span class="comp-dropdown-arrow">▾</span>`;
 
         const menu = document.createElement('div');
         menu.className = 'comp-dropdown-menu';
         menu.style.display = 'none';
 
         for (const v of dd.variants) {
-          const vdef = defs[v.id];
+          const vdef = defs[v.id] || v;
           const btn = document.createElement('button');
           btn.className = 'comp-dropdown-item';
           btn.dataset.type = v.id;
-          btn.innerHTML = `<span class="comp-icon">${this._escHtml(v.icon)}</span><span class="comp-info"><span class="comp-name">${this._escHtml(v.name)}</span>${vdef ? `<span class="comp-desc">${this._escHtml(vdef.desc || '')}</span>` : ''}</span>`;
+          const vSearchText = ((v.name || '') + ' ' + (vdef.desc || '') + ' ' + (vdef.search || '')).toLowerCase().replace(/[\s\-_]+/g, ' ');
+          btn.dataset.search = vSearchText;
+          const vSvg = window.ComponentSvg ? window.ComponentSvg.getSvg(v.id, vdef) : `<span class="comp-icon-fallback">${this._escHtml(v.icon)}</span>`;
+          const vBadge = window.ComponentSvg ? window.ComponentSvg.getBadge(v.id, vdef) : null;
+          const vBadgeHtml = vBadge ? `<span class="comp-badge">${this._escHtml(vBadge)}</span>` : '';
+          btn.innerHTML = `<span class="comp-icon">${vSvg}</span><span class="comp-info"><span class="comp-name-row"><span class="comp-name">${this._escHtml(v.name)}</span>${vBadgeHtml}</span>${vdef.desc ? `<span class="comp-desc">${this._escHtml(vdef.desc || '')}</span>` : ''}</span>`;
           btn.addEventListener('click', (e) => {
             e.stopPropagation();
             menu.style.display = 'none';
@@ -2142,7 +2150,12 @@ _newProject() {
         const shortDesc = (def.desc || '').length > 42 ? def.desc.slice(0, 42) + '…' : (def.desc || '');
         const searchText = ((def.name || '') + ' ' + (def.desc || '') + ' ' + (def.search || '')).toLowerCase().replace(/[\s\-_]+/g, ' ');
         item.dataset.search = searchText;
-        item.innerHTML = `<span class="comp-icon">${this._escHtml(def.icon || '⚙️')}</span><span class="comp-info"><span class="comp-name">${this._escHtml(def.name)}</span>${shortDesc ? `<span class="comp-desc">${this._escHtml(shortDesc)}</span>` : ''}</span>`;
+
+        const svgPreview = window.ComponentSvg ? window.ComponentSvg.getSvg(id, def) : `<span class="comp-icon-fallback">${this._escHtml(def.icon || '⚙️')}</span>`;
+        const badge = window.ComponentSvg ? window.ComponentSvg.getBadge(id, def) : null;
+        const badgeHtml = badge ? `<span class="comp-badge">${this._escHtml(badge)}</span>` : '';
+
+        item.innerHTML = `<span class="comp-icon">${svgPreview}</span><span class="comp-info"><span class="comp-name-row"><span class="comp-name">${this._escHtml(def.name)}</span>${badgeHtml}</span>${shortDesc ? `<span class="comp-desc">${this._escHtml(shortDesc)}</span>` : ''}</span><span class="comp-add-btn" title="Place ${this._escHtml(def.name)}">+</span>`;
         item.addEventListener('click', () => {
           if (this.canvas) {
             this.canvas.startPlacing(id);
@@ -5335,9 +5348,11 @@ _newProject() {
       const isActive = idx === this._cmdPaletteSelectedIdx;
       const bClass = badgeClasses[item.category] || 'badge-action';
       const bLabel = item.category.slice(0, 4);
+      const iconSvg = item.type && window.ComponentSvg ? `<span class="cmd-palette-item-icon">${window.ComponentSvg.getSvg(item.type)}</span>` : '';
       return `
         <div class="cmd-palette-item ${isActive ? 'active' : ''}" data-idx="${idx}" role="option" aria-selected="${isActive}">
           <div class="cmd-palette-item-left">
+            ${iconSvg}
             <span class="cmd-palette-badge ${bClass}">${bLabel}</span>
             <span class="cmd-palette-item-title">${this._escHtml(item.title)}</span>
             ${item.subtitle ? `<span class="cmd-palette-item-subtitle">${this._escHtml(item.subtitle)}</span>` : ''}

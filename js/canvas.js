@@ -137,6 +137,7 @@ class CircuitCanvas {
     this.wires = [];  // { id, from:{instId,pinId}, to:{instId,pinId}, color, waypoints:[], routeStyle:'orthogonal'|'bezier', bezierCtrl:{c1:{x,y},c2:{x,y}} }
     this.annotations = [];
     this.selected = null;
+    this.selectedPin = null; // { inst, pin } for canvas keyboard navigation
     this.selectedWire = null;
     this.selectedAnnotation = null;
     this.selectedComponentLabel = null;
@@ -478,6 +479,46 @@ class CircuitCanvas {
       ctx.strokeStyle = isWiringTarget ? 'rgba(0,229,255,0.5)' : (isWired ? pinColor : '#555');
       ctx.lineWidth = 1.5 / this.zoom;
       ctx.stroke();
+
+      // Selected Pin highlight (Canvas Keyboard Navigation)
+      const isSelectedPin = this.selectedPin && this.selectedPin.inst.id === inst.id && this.selectedPin.pin.id === pin.id;
+      if (isSelectedPin) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(wx, wy, 9, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0, 229, 255, 0.3)';
+        ctx.fill();
+        ctx.strokeStyle = '#00e5ff';
+        ctx.lineWidth = 2 / this.zoom;
+        ctx.stroke();
+
+        // Pin badge bubble for keyboard navigation
+        ctx.fillStyle = 'rgba(13, 18, 24, 0.92)';
+        ctx.strokeStyle = '#00e5ff';
+        ctx.lineWidth = 1 / this.zoom;
+        const pinText = `${inst.props?.label || inst.id} : ${pin.label || pin.id} [${pin.type || 'pin'}]`;
+        ctx.font = `bold ${Math.max(9, 10 / this.zoom)}px 'JetBrains Mono', Consolas, monospace`;
+        const textW = ctx.measureText(pinText).width;
+        const padX = 6 / this.zoom;
+        const boxW = textW + padX * 2;
+        const boxH = 18 / this.zoom;
+        const boxX = wx - boxW / 2;
+        const boxY = wy - 16 / this.zoom - boxH;
+        if (typeof ctx.roundRect === 'function') {
+          ctx.beginPath();
+          ctx.roundRect(boxX, boxY, boxW, boxH, 4 / this.zoom);
+          ctx.fill();
+          ctx.stroke();
+        } else {
+          ctx.fillRect(boxX, boxY, boxW, boxH);
+          ctx.strokeRect(boxX, boxY, boxW, boxH);
+        }
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(pinText, wx, boxY + boxH / 2);
+        ctx.restore();
+      }
 
       // Hover ring
       if (isWiringTarget && !isWiringFrom) {
@@ -2176,6 +2217,7 @@ class CircuitCanvas {
       this.wires = this.wires.filter(w => !ids.has(w.from.instId) && !ids.has(w.to.instId));
       this.components = this.components.filter(c => !ids.has(c.id));
       this.selected = null;
+      this.selectedPin = null;
       this.selectedWire = null;
       this.selectedAnnotation = null;
       this._onChanged();
@@ -2715,6 +2757,7 @@ class CircuitCanvas {
       // Check pin click first (start wiring)
       const pinHit = this._hitTestPin(world.x, world.y);
       if (pinHit) {
+        this.selectedPin = { inst: pinHit.inst, pin: pinHit.pin };
         if (this.mode === 'wiring') {
           // Complete wire if compatible pin
           if (pinHit.inst.id !== this.wiringFrom.inst.id) {
@@ -3479,8 +3522,49 @@ class CircuitCanvas {
     if (t && typeof t.closest === 'function' && t.closest('#editor-container')) return;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
 
-    // Prevent repeated actions when key is held down (for single-press actions)
-    if (e.repeat && !e.ctrlKey && !e.metaKey) return;
+    // Ignore canvas shortcuts when modal or command palette is open
+    const overlay = document.getElementById('modal-overlay');
+    if (overlay && !overlay.classList.contains('hidden')) return;
+    const cmdPalette = document.getElementById('command-palette-backdrop');
+    if (cmdPalette && !cmdPalette.classList.contains('hidden')) return;
+
+    const isArrow = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key);
+
+    // Prevent repeated actions when key is held down (allow held arrow nudging)
+    if (e.repeat && !e.ctrlKey && !e.metaKey && !isArrow) return;
+
+    // Arrow keys nudge selected components (Shift: 10px snap step, without Shift: fine 2px)
+    if (isArrow && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      let dx = 0, dy = 0;
+      if (e.key === 'ArrowUp') dy = -1;
+      else if (e.key === 'ArrowDown') dy = 1;
+      else if (e.key === 'ArrowLeft') dx = -1;
+      else if (e.key === 'ArrowRight') dx = 1;
+      this.nudgeSelected(dx, dy, e.shiftKey);
+      return;
+    }
+
+    // Tab / Shift+Tab cycling between components and pins
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      this.cycleSelection(e.shiftKey);
+      return;
+    }
+
+    // [ and ] direct component-only cycling (bracket navigation)
+    if ((e.key === '[' || e.key === ']') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      this.cycleComponentOnly(e.key === '[');
+      return;
+    }
+
+    // W hotkey for wiring
+    if ((e.key === 'w' || e.key === 'W') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      this.startWiringFromSelectedPin();
+      return;
+    }
 
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); this.deleteSelected(); }
     if (e.key === 'r' || e.key === 'R') { this.rotateSelected(); }
@@ -3502,8 +3586,10 @@ class CircuitCanvas {
       if (this.mode === 'wiring') this._endWiring();
       this._selectAll(false);
       this.selected = null;
+      this.selectedPin = null;
       this.selectedWire = null;
       this.selectedAnnotation = null;
+      this._render();
     }
     if (e.key === 'f' || e.key === 'F') { this.fitView(); }
     if ((e.key === 'm' || e.key === 'M') && !e.ctrlKey && !e.metaKey && !e.altKey) { this.toggleMinimap(); }
@@ -3514,6 +3600,180 @@ class CircuitCanvas {
     if (e.ctrlKey && e.key === 'z') { e.preventDefault(); this.undo(); }
     if (e.ctrlKey && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) { e.preventDefault(); this.redo(); }
     if (e.ctrlKey && e.key === 'a') { e.preventDefault(); this.selectAll(); }
+  }
+
+  /* -------------- KEYBOARD NAVIGATION -------------- */
+  _getNavigationTargets() {
+    const { COMPONENT_DEFS } = window.ArduinoComponents || {};
+    const targets = [];
+    for (const inst of this.components) {
+      targets.push({ type: 'component', inst, pin: null });
+      const def = COMPONENT_DEFS ? COMPONENT_DEFS[inst.type] : null;
+      if (def && Array.isArray(def.pins)) {
+        for (const pin of def.pins) {
+          targets.push({ type: 'pin', inst, pin });
+        }
+      }
+    }
+    return targets;
+  }
+
+  cycleSelection(reverse = false) {
+    let targets = this._getNavigationTargets();
+    if (this.mode === 'wiring') {
+      targets = targets.filter(t => t.type === 'pin');
+    }
+    if (targets.length === 0) return;
+
+    let currentIndex = -1;
+    if (this.selectedPin) {
+      currentIndex = targets.findIndex(t => t.type === 'pin' && t.inst.id === this.selectedPin.inst.id && t.pin.id === this.selectedPin.pin.id);
+    } else if (this.selected) {
+      currentIndex = targets.findIndex(t => t.type === 'component' && t.inst.id === this.selected.id);
+    }
+
+    let nextIndex;
+    if (currentIndex === -1) {
+      nextIndex = reverse ? targets.length - 1 : 0;
+    } else {
+      nextIndex = reverse ? (currentIndex - 1 + targets.length) % targets.length : (currentIndex + 1) % targets.length;
+    }
+
+    const target = targets[nextIndex];
+    this._selectAll(false);
+    this.selected = target.inst;
+    target.inst.selected = true;
+    this.selectedWire = null;
+    this.selectedAnnotation = null;
+
+    if (target.type === 'pin') {
+      this.selectedPin = { inst: target.inst, pin: target.pin };
+      if (this.mode === 'wiring') {
+        const wp = this._pinWorldPos(target.inst, target.pin);
+        this.wireMouse = { x: wp.x, y: wp.y };
+      }
+      this._ensureVisible(target.inst, target.pin);
+    } else {
+      this.selectedPin = null;
+      this._ensureVisible(target.inst);
+    }
+
+    this._notifySelectionChange();
+    this._render();
+  }
+
+  cycleComponentOnly(reverse = false) {
+    if (!this.components || this.components.length === 0) return;
+    let currentIndex = -1;
+    if (this.selected) {
+      currentIndex = this.components.findIndex(c => c.id === this.selected.id);
+    } else if (this.selectedPin) {
+      currentIndex = this.components.findIndex(c => c.id === this.selectedPin.inst.id);
+    }
+
+    let nextIndex;
+    if (currentIndex === -1) {
+      nextIndex = reverse ? this.components.length - 1 : 0;
+    } else {
+      nextIndex = reverse ? (currentIndex - 1 + this.components.length) % this.components.length : (currentIndex + 1) % this.components.length;
+    }
+
+    const nextComp = this.components[nextIndex];
+    this._selectAll(false);
+    nextComp.selected = true;
+    this.selected = nextComp;
+    this.selectedPin = null;
+    this.selectedWire = null;
+    this.selectedAnnotation = null;
+
+    this._ensureVisible(nextComp);
+    this._notifySelectionChange();
+    this._render();
+  }
+
+  nudgeSelected(dx, dy, isSnap = false) {
+    const selComps = this.components.filter(c => c.selected);
+    if (selComps.length === 0 && this.selected) selComps.push(this.selected);
+    if (selComps.length === 0) return;
+
+    if (!this._nudgeHistoryPushed) {
+      this._pushHistory();
+      this._nudgeHistoryPushed = true;
+    }
+    if (this._nudgeTimer) clearTimeout(this._nudgeTimer);
+    this._nudgeTimer = setTimeout(() => {
+      this._nudgeHistoryPushed = false;
+      this._onChanged();
+    }, 250);
+
+    const step = isSnap ? 10 : 2;
+    for (const comp of selComps) {
+      if (isSnap) {
+        if (dx !== 0) comp.x = Math.round((comp.x + dx * step) / step) * step;
+        if (dy !== 0) comp.y = Math.round((comp.y + dy * step) / step) * step;
+      } else {
+        comp.x += dx * step;
+        comp.y += dy * step;
+      }
+    }
+
+    this._render();
+  }
+
+  startWiringFromSelectedPin() {
+    if (this.mode === 'wiring') {
+      if (this.selectedPin && this.wiringFrom && this.selectedPin.inst.id !== this.wiringFrom.inst.id) {
+        this.addWire(this.wiringFrom.inst.id, this.wiringFrom.pin.id, this.selectedPin.inst.id, this.selectedPin.pin.id);
+        this._endWiring();
+        this._render();
+        return;
+      }
+      this._endWiring();
+      this._render();
+      return;
+    }
+
+    if (!this.selectedPin && this.selected) {
+      const { COMPONENT_DEFS } = window.ArduinoComponents || {};
+      const def = COMPONENT_DEFS ? COMPONENT_DEFS[this.selected.type] : null;
+      if (def && Array.isArray(def.pins) && def.pins.length > 0) {
+        this.selectedPin = { inst: this.selected, pin: def.pins[0] };
+      }
+    }
+
+    if (!this.selectedPin) return;
+
+    const wp = this._pinWorldPos(this.selectedPin.inst, this.selectedPin.pin);
+    this._startWiring(this.selectedPin.inst, this.selectedPin.pin, wp.x, wp.y);
+    this._render();
+  }
+
+  _ensureVisible(inst, pin = null) {
+    if (!this.canvas) return false;
+    const target = pin ? this._pinWorldPos(inst, pin) : { x: inst.x, y: inst.y };
+    if (!target) return false;
+    const cw = this.canvas.width || 800;
+    const ch = this.canvas.height || 600;
+    const sx = target.x * this.zoom + this.panX;
+    const sy = target.y * this.zoom + this.panY;
+    const margin = 80;
+
+    let panChanged = false;
+    if (sx < margin) {
+      this.panX += (margin - sx);
+      panChanged = true;
+    } else if (sx > cw - margin) {
+      this.panX -= (sx - (cw - margin));
+      panChanged = true;
+    }
+    if (sy < margin) {
+      this.panY += (margin - sy);
+      panChanged = true;
+    } else if (sy > ch - margin) {
+      this.panY -= (sy - (ch - margin));
+      panChanged = true;
+    }
+    return panChanged;
   }
 
   /* -------------- WIRING -------------- */
@@ -3870,6 +4130,7 @@ class CircuitCanvas {
     (this.annotations || []).forEach(a => a.selected = false);
     this.selectedAnnotation = null;
     this.selectedComponentLabel = null;
+    if (!sel) this.selectedPin = null;
   }
 
   _getPinWorldPos(instId, pinId) {
@@ -4530,6 +4791,7 @@ class CircuitCanvas {
         } : null,
       }));
       this.selected = null;
+      this.selectedPin = null;
       this.selectedWire = null;
       this.selectedAnnotation = null;
       this._onChanged();
