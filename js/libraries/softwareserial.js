@@ -38,20 +38,100 @@ window.ArduinoLibs['SoftwareSerial'] = {
         var id = '_ss_' + rxPin + '_' + txPin;
         var buf = [];
         self._softSerial = self._softSerial || {};
-        self._softSerial[id] = { rxPin: rxPin, txPin: txPin, buf: buf, listening: false };
+        var ch = { rxPin: rxPin, txPin: txPin, buf: buf, listening: true, baud: 9600 };
+        self._softSerial[id] = ch;
         self._serialLog('[SoftwareSerial] Created rx=' + rxPin + ' tx=' + txPin + '\n', 'system');
-        return { _ssId: id, rxPin: rxPin, txPin: txPin };
+
+        var inst = {
+          _ssId: id,
+          rxPin: rxPin,
+          txPin: txPin,
+          begin: function(baud) {
+            ch.listening = true;
+            ch.baud = baud || 9600;
+            self._serialLog('[SoftwareSerial] begin(' + ch.baud + ')\n', 'system');
+          },
+          available: function() {
+            return ch.listening ? ch.buf.length : 0;
+          },
+          read: function() {
+            if (!ch.listening || ch.buf.length === 0) return -1;
+            var c = ch.buf.shift();
+            return typeof c === 'number' ? c : c.charCodeAt(0);
+          },
+          peek: function() {
+            if (!ch.listening || ch.buf.length === 0) return -1;
+            var c = ch.buf[0];
+            return typeof c === 'number' ? c : c.charCodeAt(0);
+          },
+          readString: function() {
+            if (!ch.listening || ch.buf.length === 0) return '';
+            var s = '';
+            while (ch.buf.length > 0) {
+              var c = ch.buf.shift();
+              s += typeof c === 'number' ? String.fromCharCode(c) : c;
+            }
+            return s;
+          },
+          readStringUntil: function(terminator) {
+            if (!ch.listening || ch.buf.length === 0) return '';
+            var s = '';
+            var termCode = typeof terminator === 'string' ? terminator.charCodeAt(0) : terminator;
+            while (ch.buf.length > 0) {
+              var c = ch.buf.shift();
+              var code = typeof c === 'number' ? c : c.charCodeAt(0);
+              if (code === termCode) break;
+              s += String.fromCharCode(code);
+            }
+            return s;
+          },
+          write: function(val) {
+            var text = typeof val === 'number' ? String.fromCharCode(val) : String(val);
+            self._serialLog(text, 'data');
+            return 1;
+          },
+          print: function(val) {
+            self._serialLog(val !== undefined ? String(val) : '', 'data');
+          },
+          println: function(val) {
+            self._serialLog((val !== undefined ? String(val) : '') + '\n', 'data');
+          },
+          listen: function() {
+            ch.listening = true;
+            return true;
+          },
+          isListening: function() {
+            return !!ch.listening;
+          },
+          end: function() {
+            ch.listening = false;
+          },
+          flush: function() {
+            ch.buf.length = 0;
+          },
+        };
+        return inst;
       },
       softSerialBegin: function(obj, baud) {
-        var ch = self._softSerial && self._softSerial[obj._ssId];
+        if (obj && typeof obj.begin === 'function') {
+          obj.begin(baud);
+          return;
+        }
+        var ch = self._softSerial && self._softSerial[obj && obj._ssId];
         if (ch) { ch.listening = true; ch.baud = baud; }
         self._serialLog('[SoftwareSerial] begin(' + baud + ')\n', 'system');
       },
       softSerialWrite: function(obj, val) {
-        var ch = self._softSerial && self._softSerial[obj._ssId];
+        if (obj && typeof obj.write === 'function') {
+          return obj.write(val);
+        }
+        var ch = self._softSerial && self._softSerial[obj && obj._ssId];
         if (ch) { self._serialLog('[SoftwareSerial] write(' + val + ')\n', 'data'); }
       },
       softSerialPrintln: function(obj, val) {
+        if (obj && typeof obj.println === 'function') {
+          return obj.println(val);
+        }
         self._serialLog(String(val) + '\n', 'data');
       },
       genericPrintln: function(obj, val) {
@@ -72,6 +152,10 @@ window.ArduinoLibs['SoftwareSerial'] = {
           self._lcdCursor = { col: 0, row: cursor2.row + 8 * size2 };
           return;
         }
+        if (obj && typeof obj.println === 'function') {
+          obj.println(val);
+          return;
+        }
         if (obj && obj._ssId) {
           self._serialLog(text + '\n', 'data');
           return;
@@ -79,31 +163,47 @@ window.ArduinoLibs['SoftwareSerial'] = {
         self._serialLog(text + '\n', 'data');
       },
       softSerialRead: function(obj) {
-        var ch = self._softSerial && self._softSerial[obj._ssId];
-        if (ch && ch.buf.length > 0) return ch.buf.shift().charCodeAt(0);
+        if (obj && typeof obj.read === 'function') return obj.read();
+        var ch = self._softSerial && self._softSerial[obj && obj._ssId];
+        if (ch && ch.buf.length > 0) {
+          var c = ch.buf.shift();
+          return typeof c === 'number' ? c : c.charCodeAt(0);
+        }
         return -1;
       },
       softSerialAvailable: function(obj) {
-        var ch = self._softSerial && self._softSerial[obj._ssId];
-        return ch ? ch.buf.length : 0;
+        if (obj && typeof obj.available === 'function') return obj.available();
+        var ch = self._softSerial && self._softSerial[obj && obj._ssId];
+        return (ch && ch.listening) ? ch.buf.length : 0;
       },
       softSerialPeek: function(obj) {
-        var ch = self._softSerial && self._softSerial[obj._ssId];
-        if (ch && ch.buf.length > 0) return ch.buf[0].charCodeAt(0);
+        if (obj && typeof obj.peek === 'function') return obj.peek();
+        var ch = self._softSerial && self._softSerial[obj && obj._ssId];
+        if (ch && ch.buf.length > 0) {
+          var c = ch.buf[0];
+          return typeof c === 'number' ? c : c.charCodeAt(0);
+        }
         return -1;
       },
       softSerialEnd: function(obj) {
-        var ch = self._softSerial && self._softSerial[obj._ssId];
+        if (obj && typeof obj.end === 'function') return obj.end();
+        var ch = self._softSerial && self._softSerial[obj && obj._ssId];
         if (ch) ch.listening = false;
       },
-      softSerialFlush: function(obj) { },
+      softSerialFlush: function(obj) {
+        if (obj && typeof obj.flush === 'function') return obj.flush();
+        var ch = self._softSerial && self._softSerial[obj && obj._ssId];
+        if (ch) ch.buf.length = 0;
+      },
       softSerialListen: function(obj) {
-        var ch = self._softSerial && self._softSerial[obj._ssId];
+        if (obj && typeof obj.listen === 'function') return obj.listen();
+        var ch = self._softSerial && self._softSerial[obj && obj._ssId];
         if (ch) ch.listening = true;
       },
       softSerialIsListening: function(obj) {
-        var ch = self._softSerial && self._softSerial[obj._ssId];
-        return ch ? ch.listening : false;
+        if (obj && typeof obj.isListening === 'function') return obj.isListening();
+        var ch = self._softSerial && self._softSerial[obj && obj._ssId];
+        return ch ? !!ch.listening : false;
       },
     };
   },

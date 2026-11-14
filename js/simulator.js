@@ -2806,6 +2806,20 @@ class ArduinoSimulator {
     for (const ch of text) {
       this.serialInputBuffer.push(ch);
     }
+    // Also feed active SoftwareSerial instances
+    if (this._softSerial) {
+      for (const ssId in this._softSerial) {
+        const ch = this._softSerial[ssId];
+        if (ch && ch.listening !== false && Array.isArray(ch.buf)) {
+          for (const c of text) {
+            ch.buf.push(c);
+          }
+          if (ch.buf.length > 4096) {
+            ch.buf.splice(0, ch.buf.length - 4096);
+          }
+        }
+      }
+    }
     // Never let the input buffer grow without bound
     if (this.serialInputBuffer.length > 4096) {
       this.serialInputBuffer.splice(0, this.serialInputBuffer.length - 4096);
