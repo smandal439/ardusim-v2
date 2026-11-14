@@ -332,4 +332,72 @@ describe('Arduino Uno on-board reset button', () => {
       expect(outputLog).toHaveBeenCalledWith('[System] Arduino Uno reset pressed — starting simulation', 'system');
     });
   });
+
+  describe('Arduino physical RST pin functionality', () => {
+    it('does not reset when RST pin is floating or disconnected', () => {
+      const resetSpy = vi.fn();
+      cc._handleBoardResetClick = resetSpy;
+
+      cc.updateSimState({});
+      expect(resetSpy).not.toHaveBeenCalled();
+    });
+
+    it('triggers board reset when external RST pin is pulled to GND via push button', () => {
+      const resetSpy = vi.fn();
+      cc._handleBoardResetClick = resetSpy;
+
+      const btn = {
+        id: 'btn1',
+        type: 'push_button',
+        x: 300,
+        y: 100,
+        rotation: 0,
+        props: {},
+        runtimeState: { pressed: false },
+      };
+      cc.components.push(btn);
+      cc.wires = [
+        { id: 'w1', from: { instId: 'uno1', pinId: 'RST' }, to: { instId: 'btn1', pinId: 'p1' } },
+        { id: 'w2', from: { instId: 'btn1', pinId: 'p3' }, to: { instId: 'uno1', pinId: 'GND1' } },
+      ];
+
+      // Initially unpressed
+      cc.updateSimState({});
+      expect(resetSpy).not.toHaveBeenCalled();
+      expect(unoComp.runtimeState._resetPressed).toBeFalsy();
+
+      // Press the button (connects RST to GND)
+      btn.runtimeState.pressed = true;
+      cc.updateSimState({});
+      expect(resetSpy).toHaveBeenCalledTimes(1);
+      expect(unoComp.runtimeState._resetPressed).toBe(true);
+
+      // Subsequent update while held down does not re-trigger repeatedly
+      cc.updateSimState({});
+      expect(resetSpy).toHaveBeenCalledTimes(1);
+
+      // Release the button
+      btn.runtimeState.pressed = false;
+      cc.updateSimState({});
+      expect(resetSpy).toHaveBeenCalledTimes(1);
+
+      // Press again
+      btn.runtimeState.pressed = true;
+      cc.updateSimState({});
+      expect(resetSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('triggers reset when RST is wired directly to GND', () => {
+      const resetSpy = vi.fn();
+      cc._handleBoardResetClick = resetSpy;
+
+      cc.wires = [
+        { id: 'w1', from: { instId: 'uno1', pinId: 'RST' }, to: { instId: 'uno1', pinId: 'GND1' } },
+      ];
+
+      cc.updateSimState({});
+      expect(resetSpy).toHaveBeenCalledTimes(1);
+      expect(unoComp.runtimeState._resetPressed).toBe(true);
+    });
+  });
 });

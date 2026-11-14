@@ -406,7 +406,12 @@ class ElectricalEngine {
     // 3. Initialize voltages from sources and grounds
     const fixedNets = new Set();
     for (const [, net] of this.nets) {
-      if (net.sources.length > 0) {
+      const hasHardGnd = net.grounds.length > 0 && net.grounds.some(g => (g.resistance || 0) === 0);
+      const onlyPullup = net.sources.length > 0 && net.sources.every(s => s.type === 'pullup');
+      if (hasHardGnd && onlyPullup) {
+        net.voltage = 0;
+        fixedNets.add(net.id);
+      } else if (net.sources.length > 0) {
         net.voltage = net.sources.sort((a, b) => b.voltage - a.voltage)[0].voltage;
         fixedNets.add(net.id);
       } else if (net.grounds.length > 0) {
@@ -1049,6 +1054,9 @@ class ElectricalEngine {
             if (!this._railHasBattery(inst.id, pinId)) addSource(pinId, '5v', 5.0, 255);
           } else if (pinId === '3V3' || pinId === '3V3OUT') {
             if (!this._railHasBattery(inst.id, pinId)) addSource(pinId, '3v3', 3.3, 168);
+          } else if (pinId === 'RST' || pinId === 'RST1' || pinId === 'RST2' || pinId === 'EN') {
+            // Reset pin is an active-low input with internal pull-up to supply rail
+            addSource(pinId, 'pullup', maxV, 255, 10000);
           } else if (pinId === 'GND1' || pinId === 'GND2' || pinId === 'GND3' || pinId === 'GND4' || pinId === 'GND5' || pinId === 'GND6' || pinId === 'GND7' || pinId === 'GND_D' || pinId === 'GND' || pinId === 'AGND') {
             addGround(pinId, 'gnd');
           } else {

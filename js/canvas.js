@@ -456,7 +456,7 @@ class CircuitCanvas {
 
       // Get pin state
       const pinKey = `pin_${this._pinToNumber(pin.id)}`;
-      const val = sim.isRunning ? (sim.pinStates[pinKey] || 0) : 0;
+      const val = (sim && sim.isRunning) ? (sim.pinStates[pinKey] || 0) : 0;
 
       // Pin color
       let pinColor;
@@ -4802,6 +4802,34 @@ class CircuitCanvas {
     // Solve electrical graph
     this.engine.solve(this);
 
+    // Check external RST / EN pin reset (falling edge to GND)
+    for (const inst of this.components) {
+      if (inst.type !== 'arduino_uno' && inst.type !== 'arduino_nano' && inst.type !== 'esp32_devkit_v1') continue;
+      const rstPinIds = inst.type === 'arduino_nano' ? ['RST1', 'RST2'] : (inst.type === 'esp32_devkit_v1' ? ['EN'] : ['RST']);
+      let isGrounded = false;
+      for (const rstId of rstPinIds) {
+        const net = this.engine?.pinToNet?.get(`${inst.id}:${rstId}`);
+        if (net && net.grounds && net.grounds.length > 0 && (net.voltage === 0 || net.voltage < 1.0)) {
+          isGrounded = true;
+          break;
+        }
+      }
+      inst.runtimeState = inst.runtimeState || {};
+      const wasGrounded = !!inst.runtimeState._extRstGnd;
+      inst.runtimeState._extRstGnd = isGrounded;
+      if (isGrounded && !wasGrounded) {
+        inst.runtimeState._resetPressed = true;
+        this._render();
+        if (inst.runtimeState._resetReleaseTimer) clearTimeout(inst.runtimeState._resetReleaseTimer);
+        inst.runtimeState._resetReleaseTimer = setTimeout(() => {
+          inst.runtimeState._resetPressed = false;
+          inst.runtimeState._resetReleaseTimer = null;
+          this._render();
+        }, 160);
+        this._handleBoardResetClick(inst);
+      }
+    }
+
     // Feed back solved voltages for Arduino input pins so external signals
     // (func_gen, sensors, etc.) propagate to pinStates ← _emitPinChange ← interrupts
     const sim = window.ArduinoSim;
@@ -6996,6 +7024,8 @@ class CircuitCanvas {
           sources.push({ type: '5v', voltage: 5.0, rawVal: 255, resistance: current.resistance });
         } else if (pinId === '3V3') {
           sources.push({ type: '3v3', voltage: 3.3, rawVal: 168, resistance: current.resistance });
+        } else if (pinId === 'RST' || pinId === 'RST1' || pinId === 'RST2') {
+          sources.push({ type: 'pullup', voltage: 5.0, rawVal: 255, resistance: current.resistance + 10000 });
         } else {
           // Digital or Analog pin (D0—D13, A0—A5)
           const pinNum = this._pinToNumber(pinId);
