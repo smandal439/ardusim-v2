@@ -1107,10 +1107,13 @@ class ElectricalEngine {
       case 'mb102_power': {
         const powered = inst.runtimeState?.powered ?? inst.props?.powered ?? 1;
         if (powered) {
-          const topV = inst.props?.topVoltage ?? '5V';
+          const topV = inst.runtimeState?.topVoltage ?? inst.props?.topVoltage ?? '5V';
+          const botV = inst.runtimeState?.bottomVoltage ?? inst.props?.bottomVoltage ?? '3.3V';
           const voltageMap = { '5V': 5.0, '3.3V': 3.3, 'OFF': 0 };
           if (voltageMap[topV] > 0) addSource('vcc_t', topV, voltageMap[topV], 255);
-          addSource('aux_5v', '5v', 5.0, 255);
+          if (voltageMap[botV] > 0) addSource('vcc_b', botV, voltageMap[botV], 255);
+          addSource('aux_5v', '5V', 5.0, 255);
+          addSource('aux_3v3', '3.3V', 3.3, 255);
         }
         addGround('gnd_t', 'gnd');
         addGround('gnd_b', 'gnd');

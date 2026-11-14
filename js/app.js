@@ -4366,9 +4366,11 @@ _newProject() {
         select.name = key;
         iDef.options.forEach(opt => {
           const o = document.createElement('option');
-          o.value = opt.value;
-          o.textContent = opt.label;
-          if (opt.value === String(value)) o.selected = true;
+          const val = typeof opt === 'object' && opt !== null ? opt.value : opt;
+          const lbl = typeof opt === 'object' && opt !== null ? (opt.label ?? opt.value) : opt;
+          o.value = val;
+          o.textContent = lbl;
+          if (String(val) === String(value)) o.selected = true;
           select.appendChild(o);
         });
         if (key === 'model') {

@@ -539,6 +539,8 @@
             </div>
             <div class="canvas-wrapper" id="canvas-wrapper">
                 <canvas id="circuit-canvas"></canvas>
+                <!-- On-Canvas Floating Quick-Controls for Sensors & Potentiometers -->
+                <div class="canvas-quick-controls hidden" id="canvas-quick-controls" aria-label="Component Quick Controls"></div>
                 <!-- Canvas Mini-Map Navigator -->
                 <div class="canvas-minimap" id="canvas-minimap" aria-label="Canvas Mini-Map">
                     <div class="minimap-header">
@@ -1434,8 +1436,9 @@
     </div>
     <!-- Hidden file input for load --> <input type="file" id="file-input" accept=".json,.ardusim"
         class="hidden" /> <!-- Toast notifications -->
-    <div class="toast-container" id="toast-container" role="status" aria-live="polite"></div> <!-- Pin hover tooltip -->
-    <div class="pin-tooltip hidden" id="pin-tooltip"></div> <!-- Loading overlay -->
+    <div class="toast-container" id="toast-container" role="status" aria-live="polite"></div> <!-- Pin & Wire hover probe tooltips -->
+    <div class="pin-tooltip hidden" id="pin-tooltip"></div>
+    <div class="wire-tooltip hidden" id="wire-tooltip"></div> <!-- Loading overlay -->
     <div class="loading-overlay" id="loading-overlay">
         <div class="loading-spinner"></div>
         <p>Loading ArduSim…</p> <span class="loading-sub">Initializing Monaco Editor &amp; Components</span>

@@ -306,15 +306,34 @@ defComp({
   desc: 'MB102 3.3V/5V breadboard power supply module with DC barrel jack, USB-A input/output, dual AMS1117 regulators, and rail selector jumpers',
   width: 160,
   height: 96,
+  hidePinLabels: true,
   defaultProps: {
     powered: 1,
     topVoltage: '5V',
     bottomVoltage: '3.3V',
   },
   interactive: [
-    { field: 'powered', label: 'Power Switch', min: 0, max: 1, step: 1, unit: '' },
-    { field: 'topVoltage', label: 'Top Rail', type: 'select', options: ['OFF', '3.3V', '5V'] },
-    { field: 'bottomVoltage', label: 'Bottom Rail', type: 'select', options: ['OFF', '3.3V', '5V'] },
+    { field: 'powered', label: 'Power Switch', type: 'toggle', min: 0, max: 1, step: 1, unit: '', inline: { x: 44, y: 26, w: 18, h: 18 } },
+    {
+      field: 'topVoltage',
+      label: 'Top Rail',
+      type: 'select',
+      options: [
+        { value: '5V', label: '5V' },
+        { value: '3.3V', label: '3.3V' },
+        { value: 'OFF', label: 'OFF (0V)' },
+      ],
+    },
+    {
+      field: 'bottomVoltage',
+      label: 'Bottom Rail',
+      type: 'select',
+      options: [
+        { value: '5V', label: '5V' },
+        { value: '3.3V', label: '3.3V' },
+        { value: 'OFF', label: 'OFF (0V)' },
+      ],
+    },
   ],
   pins: [
     { id: 'vcc_t', label: 'VCC_TOP', type: PIN_TYPE.POWER, x: 148, y: 12, side: 'top' },
@@ -328,62 +347,130 @@ defComp({
   draw(ctx, inst, sim) {
     const { x, y } = inst;
     const isPowered = Boolean(inst.runtimeState?.powered ?? inst.props.powered ?? 1);
-    const topV = inst.props.topVoltage ?? '5V';
-    const botV = inst.props.bottomVoltage ?? '3.3V';
+    const topV = String(inst.runtimeState?.topVoltage ?? inst.props.topVoltage ?? '5V');
+    const botV = String(inst.runtimeState?.bottomVoltage ?? inst.props.bottomVoltage ?? '3.3V');
+    const isOverload = Boolean(inst.runtimeState?.overload);
+    const totalCurrent_mA = Number(inst.runtimeState?.actualCurrent_mA ?? 0);
 
     ctx.save();
     ctx.translate(x, y);
 
-    ctx.fillStyle = '#14171a';
-    roundRect(ctx, 4, 4, 152, 88, 5);
+    // 1. Board Contour / PCB Outline with the classic breadboard notch
+    // Left edge: x=4, top edge: y=4, bottom edge: y=92.
+    // Right edge has top wing (y=4..32, x=154), center notch (y=32..64, x=142), bottom wing (y=64..92, x=154).
+    ctx.beginPath();
+    ctx.moveTo(8, 4);
+    ctx.lineTo(150, 4);
+    ctx.arcTo(154, 4, 154, 8, 4);
+    ctx.lineTo(154, 30);
+    ctx.arcTo(154, 33, 151, 33, 3);
+    ctx.lineTo(144, 33);
+    ctx.arcTo(141, 33, 141, 36, 3);
+    ctx.lineTo(141, 60);
+    ctx.arcTo(141, 63, 144, 63, 3);
+    ctx.lineTo(151, 63);
+    ctx.arcTo(154, 63, 154, 66, 3);
+    ctx.lineTo(154, 88);
+    ctx.arcTo(154, 92, 150, 92, 4);
+    ctx.lineTo(8, 92);
+    ctx.arcTo(4, 92, 4, 88, 4);
+    ctx.lineTo(4, 8);
+    ctx.arcTo(4, 4, 8, 4, 4);
+    ctx.closePath();
+
+    // Fill PCB dark solder mask with subtle gradient
+    const pcbGrad = ctx.createLinearGradient(0, 4, 0, 92);
+    pcbGrad.addColorStop(0, '#15191e');
+    pcbGrad.addColorStop(0.5, '#111417');
+    pcbGrad.addColorStop(1, '#0c0e10');
+    ctx.fillStyle = pcbGrad;
     ctx.fill();
 
-    ctx.strokeStyle = '#222830';
+    // Solder mask border outline
+    ctx.strokeStyle = '#27303a';
     ctx.lineWidth = 1.2;
-    roundRect(ctx, 6, 6, 148, 84, 4);
     ctx.stroke();
 
-    const holes = [[8, 8], [8, 88], [152, 8], [152, 88]];
+    // 4 Corner mounting holes with ENIG gold plating
+    const holes = [[9, 9], [9, 87], [149, 9], [149, 87]];
     holes.forEach(([hx, hy]) => {
-      ctx.fillStyle = '#c8a452';
-      ctx.beginPath(); ctx.arc(hx, hy, 3.2, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#0a0d10';
-      ctx.beginPath(); ctx.arc(hx, hy, 1.8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#c5a044';
+      ctx.beginPath(); ctx.arc(hx, hy, 3.4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#e6c86e';
+      ctx.beginPath(); ctx.arc(hx, hy, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#07090b';
+      ctx.beginPath(); ctx.arc(hx, hy, 1.7, 0, Math.PI * 2); ctx.fill();
     });
 
-    const jackGrad = ctx.createLinearGradient(6, 10, 6, 36);
-    jackGrad.addColorStop(0, '#2e3238');
-    jackGrad.addColorStop(0.5, '#191b1e');
-    jackGrad.addColorStop(1, '#0e1012');
+    // Copper micro-vias
+    const vias = [[38, 14], [38, 78], [88, 14], [88, 82], [118, 36], [118, 60]];
+    vias.forEach(([vx, vy]) => {
+      ctx.fillStyle = '#bfa14c';
+      ctx.beginPath(); ctx.arc(vx, vy, 1.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#0a0d10';
+      ctx.beginPath(); ctx.arc(vx, vy, 0.6, 0, Math.PI * 2); ctx.fill();
+    });
+
+    // 2. DC Barrel Jack (5.5mm x 2.1mm)
+    const jackGrad = ctx.createLinearGradient(6, 8, 6, 36);
+    jackGrad.addColorStop(0, '#32373e');
+    jackGrad.addColorStop(0.5, '#1b1d22');
+    jackGrad.addColorStop(1, '#0f1013');
     ctx.fillStyle = jackGrad;
-    roundRect(ctx, 6, 10, 32, 24, 2);
+    roundRect(ctx, 6, 8, 30, 26, 2);
     ctx.fill();
 
-    ctx.strokeStyle = '#8a939e';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(6, 12, 5, 20);
+    // Outer metal collar
+    ctx.strokeStyle = '#828c98';
+    ctx.lineWidth = 1.4;
+    ctx.strokeRect(6, 11, 4, 20);
 
-    ctx.fillStyle = '#08080a';
-    ctx.beginPath(); ctx.arc(6, 22, 6.5, -Math.PI / 2, Math.PI / 2); ctx.fill();
+    // Inner cavity
+    ctx.fillStyle = '#060708';
+    ctx.beginPath(); ctx.arc(6, 21, 6.8, -Math.PI / 2, Math.PI / 2); ctx.fill();
 
+    // Center pin (+)
     ctx.fillStyle = '#d4af37';
-    ctx.beginPath(); ctx.arc(6, 22, 2.2, -Math.PI / 2, Math.PI / 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(6, 21, 2.2, -Math.PI / 2, Math.PI / 2); ctx.fill();
 
-    const usbGrad = ctx.createLinearGradient(6, 48, 6, 78);
-    usbGrad.addColorStop(0, '#dce3eb');
-    usbGrad.addColorStop(0.3, '#bcc5cf');
-    usbGrad.addColorStop(0.7, '#8f9aa6');
-    usbGrad.addColorStop(1, '#5f6974');
+    // Polarity diagram and label
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.font = 'bold 3.5px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('-(o- +', 21, 31);
+    ctx.fillText('6.5-12V', 21, 36);
+
+    // 3. USB Type-A Receptacle (5V Input / Output)
+    const usbGrad = ctx.createLinearGradient(6, 46, 6, 76);
+    usbGrad.addColorStop(0, '#dbe2ea');
+    usbGrad.addColorStop(0.25, '#b0bec5');
+    usbGrad.addColorStop(0.75, '#78909c');
+    usbGrad.addColorStop(1, '#455a64');
     ctx.fillStyle = usbGrad;
-    roundRect(ctx, 6, 48, 30, 26, 2);
+    roundRect(ctx, 6, 46, 30, 26, 2);
     ctx.fill();
+    ctx.strokeStyle = '#37474f';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
 
+    // Receptacle interior & retention latches
     ctx.fillStyle = '#1c2024';
-    ctx.fillRect(6, 52, 4, 18);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(14, 55, 6, 4);
-    ctx.fillRect(14, 63, 6, 4);
+    ctx.fillRect(6, 50, 4, 18);
+    // Latches
+    ctx.fillStyle = '#263238';
+    ctx.fillRect(15, 52, 5, 3.5);
+    ctx.fillRect(15, 62, 5, 3.5);
+    ctx.fillStyle = '#eceff1';
+    ctx.fillRect(15.5, 52.5, 4, 2.5);
+    ctx.fillRect(15.5, 62.5, 4, 2.5);
 
+    // Label
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.font = 'bold 3.5px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('USB 5V', 21, 76);
+
+    // 4. Latching Tactile Push Button (Power ON/OFF Switch)
     ctx.fillStyle = '#1e2227';
     roundRect(ctx, 44, 26, 18, 18, 2);
     ctx.fill();
@@ -391,114 +478,245 @@ defComp({
     ctx.lineWidth = 1;
     ctx.stroke();
 
+    // Bezel ring
+    ctx.fillStyle = '#121417';
+    ctx.beginPath(); ctx.arc(53, 35, 7.5, 0, Math.PI * 2); ctx.fill();
+
     const btnRadius = isPowered ? 5.8 : 6.8;
-    const btnGrad = ctx.createRadialGradient(53, 35, 1, 53, 35, btnRadius);
-    btnGrad.addColorStop(0, isPowered ? '#ff5252' : '#d32f2f');
-    btnGrad.addColorStop(0.7, isPowered ? '#d50000' : '#9a0007');
-    btnGrad.addColorStop(1, '#5c0000');
+    const btnGrad = ctx.createRadialGradient(52, 34, 1, 53, 35, btnRadius);
+    if (isPowered) {
+      // Mechanically pressed
+      btnGrad.addColorStop(0, '#e53935');
+      btnGrad.addColorStop(0.6, '#c62828');
+      btnGrad.addColorStop(1, '#670000');
+    } else {
+      // Elevated with drop shadow
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.beginPath(); ctx.arc(54, 36, 7.2, 0, Math.PI * 2); ctx.fill();
+      btnGrad.addColorStop(0, '#ff6b6b');
+      btnGrad.addColorStop(0.5, '#e53935');
+      btnGrad.addColorStop(1, '#8e0000');
+    }
     ctx.fillStyle = btnGrad;
-    ctx.beginPath();
-    ctx.arc(53, 35, btnRadius, 0, Math.PI * 2);
+    ctx.beginPath(); ctx.arc(53, 35, btnRadius, 0, Math.PI * 2); ctx.fill();
+
+    // Specular glint on button when elevated
+    if (!isPowered) {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.beginPath(); ctx.arc(51.5, 33.5, 1.8, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // ON/OFF Label
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.font = 'bold 4.5px "JetBrains Mono", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('ON/OFF', 53, 49);
+
+    // 5. Power Indicator LED (PWR)
+    ctx.fillStyle = '#212529';
+    roundRect(ctx, 47, 8, 6, 8, 1);
     ctx.fill();
 
+    if (isPowered) {
+      if (isOverload) {
+        // Warning / Overload Glow (Red/Amber)
+        ctx.fillStyle = 'rgba(255, 61, 0, 0.4)';
+        ctx.beginPath(); ctx.arc(50, 12, 8, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ff3d00';
+        ctx.beginPath(); ctx.arc(50, 12, 2.5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.arc(49.2, 11.2, 0.8, 0, Math.PI * 2); ctx.fill();
+      } else {
+        // Vibrant Green Glow
+        ctx.fillStyle = 'rgba(0, 230, 118, 0.4)';
+        ctx.beginPath(); ctx.arc(50, 12, 8, 0, Math.PI * 2); ctx.fill();
+        const ledGrad = ctx.createRadialGradient(49.5, 11.5, 0.5, 50, 12, 2.5);
+        ledGrad.addColorStop(0, '#b9f6ca');
+        ledGrad.addColorStop(0.6, '#00e676');
+        ledGrad.addColorStop(1, '#00a844');
+        ctx.fillStyle = ledGrad;
+        ctx.beginPath(); ctx.arc(50, 12, 2.5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.beginPath(); ctx.arc(49.2, 11.2, 0.8, 0, Math.PI * 2); ctx.fill();
+      }
+    } else {
+      // Dormant unlit LED
+      ctx.fillStyle = '#133519';
+      ctx.beginPath(); ctx.arc(50, 12, 2.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.beginPath(); ctx.arc(49.3, 11.3, 0.7, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+    ctx.font = 'bold 3.5px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('PWR', 50, 20);
+
+    // 6. Dual AMS1117 Linear Voltage Regulators (SOT-223)
     const regulators = [
-      { label: 'AMS1117\n5.0', y: 15 },
-      { label: 'AMS1117\n3.3', y: 55 }
+      { label: 'AMS1117', sub: '5.0', y: 15 },
+      { label: 'AMS1117', sub: '3.3', y: 55 },
     ];
 
     regulators.forEach(reg => {
-      ctx.fillStyle = '#cfd8dc';
-      roundRect(ctx, 68, reg.y - 3, 14, 3, 0.5);
+      // Copper thermal tab soldered to PCB
+      ctx.fillStyle = '#b0bec5';
+      roundRect(ctx, 68, reg.y - 3, 14, 3, 0.6);
       ctx.fill();
 
-      ctx.fillStyle = '#1e2022';
+      // SOT-223 Molded package
+      const pkgGrad = ctx.createLinearGradient(67, reg.y, 83, reg.y + 15);
+      pkgGrad.addColorStop(0, '#2b3036');
+      pkgGrad.addColorStop(1, '#181a1d');
+      ctx.fillStyle = pkgGrad;
       roundRect(ctx, 67, reg.y, 16, 15, 1.5);
       ctx.fill();
+      ctx.strokeStyle = '#37474f';
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
 
-      ctx.fillStyle = '#b0bec5';
-      ctx.fillRect(68.5, reg.y + 15, 2.5, 3);
-      ctx.fillRect(73.5, reg.y + 15, 2.5, 3);
-      ctx.fillRect(78.5, reg.y + 15, 2.5, 3);
+      // Pin 1 dot
+      ctx.fillStyle = '#0f1113';
+      ctx.beginPath(); ctx.arc(69.5, reg.y + 2.5, 0.8, 0, Math.PI * 2); ctx.fill();
 
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+      // 3 Gull-wing leads
+      ctx.fillStyle = '#cfd8dc';
+      ctx.fillRect(68.5, reg.y + 15, 2.5, 3.5);
+      ctx.fillRect(73.5, reg.y + 15, 2.5, 3.5);
+      ctx.fillRect(78.5, reg.y + 15, 2.5, 3.5);
+
+      // Silkscreen text
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
       ctx.font = 'bold 3.5px "JetBrains Mono", monospace';
       ctx.textAlign = 'center';
-      const lines = reg.label.split('\n');
-      ctx.fillText(lines[0], 75, reg.y + 6);
-      ctx.fillText(lines[1], 75, reg.y + 11);
+      ctx.fillText(reg.label, 75, reg.y + 6.5);
+      ctx.font = 'bold 4px "JetBrains Mono", monospace';
+      ctx.fillText(reg.sub, 75, reg.y + 11.5);
     });
 
+    // 7. Aluminum Electrolytic Filter Capacitors
     const caps = [{ x: 50, y: 64 }, { x: 50, y: 78 }];
     caps.forEach(cap => {
-      const capGrad = ctx.createRadialGradient(cap.x, cap.y, 1, cap.x, cap.y, 5);
-      capGrad.addColorStop(0, '#546e7a');
-      capGrad.addColorStop(0.7, '#263238');
-      capGrad.addColorStop(1, '#101416');
+      // Outer rim
+      const capGrad = ctx.createRadialGradient(cap.x - 1, cap.y - 1, 1, cap.x, cap.y, 5);
+      capGrad.addColorStop(0, '#78909c');
+      capGrad.addColorStop(0.7, '#37474f');
+      capGrad.addColorStop(1, '#1b2226');
       ctx.fillStyle = capGrad;
       ctx.beginPath(); ctx.arc(cap.x, cap.y, 5, 0, Math.PI * 2); ctx.fill();
 
+      // Negative polarity stripe
       ctx.fillStyle = '#cfd8dc';
       ctx.beginPath();
       ctx.arc(cap.x, cap.y, 5, -Math.PI / 4, Math.PI / 4);
       ctx.lineTo(cap.x, cap.y);
       ctx.closePath();
       ctx.fill();
+
+      // Stamped safety vent cross (+)
+      ctx.strokeStyle = '#263238';
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(cap.x - 2, cap.y); ctx.lineTo(cap.x + 2, cap.y);
+      ctx.moveTo(cap.x, cap.y - 2); ctx.lineTo(cap.x, cap.y + 2);
+      ctx.stroke();
     });
 
-    ctx.fillStyle = '#212529';
-    roundRect(ctx, 47, 10, 6, 8, 1);
-    ctx.fill();
-
-    if (isPowered) {
-      ctx.fillStyle = 'rgba(0, 230, 118, 0.35)';
-      ctx.beginPath(); ctx.arc(50, 14, 7, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#00e676';
-      ctx.beginPath(); ctx.arc(50, 14, 2.4, 0, Math.PI * 2); ctx.fill();
-    } else {
-      ctx.fillStyle = '#1b5e20';
-      ctx.beginPath(); ctx.arc(50, 14, 2.2, 0, Math.PI * 2); ctx.fill();
-    }
-
-    function drawJumperBlock(jx, jy, selectedVal) {
-      ctx.fillStyle = '#1a1a1a';
-      roundRect(ctx, jx - 1, jy - 1, 18, 8, 1);
+    // 8. 3-Pin Jumper Blocks (Top & Bottom Rails)
+    function drawJumperBlock(jx, jy, selectedVal, labelY) {
+      // Header base insulator
+      ctx.fillStyle = '#181818';
+      roundRect(ctx, jx - 1, jy - 1, 21, 9, 1.2);
       ctx.fill();
-
-      for (let i = 0; i < 3; i++) {
-        ctx.fillStyle = '#ffd066';
-        ctx.beginPath(); ctx.arc(jx + 2.5 + i * 5.5, jy + 3, 1.2, 0, Math.PI * 2); ctx.fill();
-      }
-
-      ctx.fillStyle = '#fbc02d';
-      ctx.strokeStyle = '#c49000';
+      ctx.strokeStyle = '#2e2e2e';
       ctx.lineWidth = 0.5;
+      ctx.stroke();
 
-      if (selectedVal === '5V') {
-        roundRect(ctx, jx + 0.5, jy + 0.5, 9, 5, 1);
-        ctx.fill(); ctx.stroke();
-      } else if (selectedVal === '3.3V') {
-        roundRect(ctx, jx + 6, jy + 0.5, 9, 5, 1);
-        ctx.fill(); ctx.stroke();
+      // 3 Gold square pins
+      for (let i = 0; i < 3; i++) {
+        const px = jx + 3 + i * 6.5;
+        const py = jy + 3.5;
+        ctx.fillStyle = '#e5c158';
+        ctx.fillRect(px - 1, py - 1, 2, 2);
+        ctx.fillStyle = '#ffe082';
+        ctx.fillRect(px - 0.5, py - 0.5, 1, 1);
       }
+
+      // Molded yellow jumper shunt
+      if (selectedVal === '5V') {
+        // Bridges Pin 1 and Pin 2
+        const shuntGrad = ctx.createLinearGradient(jx + 1, jy, jx + 1, jy + 7);
+        shuntGrad.addColorStop(0, '#fdd835');
+        shuntGrad.addColorStop(0.7, '#fbc02d');
+        shuntGrad.addColorStop(1, '#f57f17');
+        ctx.fillStyle = shuntGrad;
+        roundRect(ctx, jx + 1, jy + 0.5, 10.5, 6, 1.2);
+        ctx.fill();
+        ctx.strokeStyle = '#e65100';
+        ctx.lineWidth = 0.6;
+        ctx.stroke();
+        // Grip ridges
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+        ctx.fillRect(jx + 4, jy + 1.5, 1, 4);
+        ctx.fillRect(jx + 7, jy + 1.5, 1, 4);
+      } else if (selectedVal === '3.3V') {
+        // Bridges Pin 2 and Pin 3
+        const shuntGrad = ctx.createLinearGradient(jx + 7.5, jy, jx + 7.5, jy + 7);
+        shuntGrad.addColorStop(0, '#fdd835');
+        shuntGrad.addColorStop(0.7, '#fbc02d');
+        shuntGrad.addColorStop(1, '#f57f17');
+        ctx.fillStyle = shuntGrad;
+        roundRect(ctx, jx + 7.5, jy + 0.5, 10.5, 6, 1.2);
+        ctx.fill();
+        ctx.strokeStyle = '#e65100';
+        ctx.lineWidth = 0.6;
+        ctx.stroke();
+        // Grip ridges
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+        ctx.fillRect(jx + 10.5, jy + 1.5, 1, 4);
+        ctx.fillRect(jx + 13.5, jy + 1.5, 1, 4);
+      } else {
+        // OFF: parked on single pin leaving common disconnected
+        ctx.fillStyle = '#fbc02d';
+        roundRect(ctx, jx + 1, jy + 1, 4.5, 5, 0.8);
+        ctx.fill();
+      }
+
+      // Silkscreen legends
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+      ctx.font = 'bold 3.8px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('5V   OFF   3V3', jx + 9.5, labelY);
     }
 
-    drawJumperBlock(96, 18, topV);
-    drawJumperBlock(96, 72, botV);
+    drawJumperBlock(94, 18, topV, 14);
+    drawJumperBlock(94, 71, botV, 85);
 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.font = 'bold 5.5px "JetBrains Mono", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('MB-102', 124, 42);
-    ctx.fillText('POWER MODULE', 124, 49);
+    // 9. Auxiliary 2x4 Header (3.3V, 5V, GND, GND)
+    ctx.fillStyle = '#1c1c1c';
+    roundRect(ctx, 94, 37, 18, 25, 1.5);
+    ctx.fill();
+    ctx.strokeStyle = '#2d2d2d';
+    ctx.lineWidth = 0.6;
+    ctx.stroke();
 
-    ctx.font = 'bold 4.5px "JetBrains Mono", sans-serif';
-    ctx.fillText('ON/OFF', 53, 49);
+    const auxLabels = ['3V3', '5V', 'GND', 'GND'];
+    for (let r = 0; r < 4; r++) {
+      const py = 41 + r * 5.7;
+      for (let c = 0; c < 2; c++) {
+        const px = 98 + c * 7;
+        ctx.fillStyle = '#e5c158';
+        ctx.fillRect(px - 1, py - 1, 2, 2);
+        ctx.fillStyle = '#ffe082';
+        ctx.fillRect(px - 0.5, py - 0.5, 1, 1);
+      }
+      // Silkscreen label to the left of the header
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+      ctx.font = 'bold 3.5px "JetBrains Mono", monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText(auxLabels[r], 93, py + 1.2);
+    }
 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
-    ctx.font = 'bold 4px "JetBrains Mono", monospace';
-    ctx.fillText('5V  OFF 3V3', 105, 14);
-    ctx.fillText('5V  OFF 3V3', 105, 85);
-
+    // 10. Output Rail Wings (Breadboard Insert Header Pins)
     const railPins = [
       { label: '+', color: '#e53935', x: 148, y: 12 },
       { label: '-', color: '#1e88e5', x: 148, y: 22 },
@@ -506,30 +724,62 @@ defComp({
       { label: '-', color: '#1e88e5', x: 148, y: 84 },
     ];
 
+    // Colored polarity stripes on the wings
+    ctx.fillStyle = 'rgba(229, 57, 53, 0.25)';
+    roundRect(ctx, 138, 8, 14, 8, 1); ctx.fill();
+    ctx.fillStyle = 'rgba(30, 136, 229, 0.25)';
+    roundRect(ctx, 138, 18, 14, 8, 1); ctx.fill();
+
+    ctx.fillStyle = 'rgba(229, 57, 53, 0.25)';
+    roundRect(ctx, 138, 70, 14, 8, 1); ctx.fill();
+    ctx.fillStyle = 'rgba(30, 136, 229, 0.25)';
+    roundRect(ctx, 138, 80, 14, 8, 1); ctx.fill();
+
     railPins.forEach(p => {
       ctx.fillStyle = p.color;
       ctx.font = 'bold 8px "JetBrains Mono", monospace';
       ctx.textAlign = 'right';
       ctx.fillText(p.label, p.x - 7, p.y + 3);
 
-      ctx.fillStyle = '#c8a452';
-      ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#c5a044';
+      ctx.beginPath(); ctx.arc(p.x, p.y, 3.2, 0, Math.PI * 2); ctx.fill();
 
-      ctx.fillStyle = '#ffd066';
-      ctx.beginPath(); ctx.arc(p.x, p.y, 1.6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffd54f';
+      ctx.beginPath(); ctx.arc(p.x, p.y, 1.8, 0, Math.PI * 2); ctx.fill();
     });
 
-    ctx.fillStyle = '#1c1c1c';
-    roundRect(ctx, 92, 38, 16, 24, 1.5);
-    ctx.fill();
+    // 11. Silkscreen Model & Live Status HUD
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.font = 'bold 6px "JetBrains Mono", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('MB-102', 124, 43);
 
-    for (let r = 0; r < 4; r++) {
-      for (let c = 0; c < 2; c++) {
-        ctx.fillStyle = '#ffd066';
-        ctx.beginPath();
-        ctx.arc(96 + c * 8, 42 + r * 5.5, 1.2, 0, Math.PI * 2);
-        ctx.fill();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.font = 'bold 4px "JetBrains Mono", sans-serif';
+    ctx.fillText('POWER MODULE', 124, 49);
+
+    // Live Status badge
+    if (isPowered) {
+      if (isOverload) {
+        ctx.fillStyle = '#ff3d00';
+        ctx.font = 'bold 4px "JetBrains Mono", monospace';
+        ctx.fillText('⚠️ OVERLOAD', 124, 56);
+      } else {
+        ctx.fillStyle = '#00e676';
+        ctx.font = 'bold 4px "JetBrains Mono", monospace';
+        const topText = topV === 'OFF' ? 'OFF' : topV;
+        const botText = botV === 'OFF' ? 'OFF' : botV;
+        ctx.fillText(`${topText} / ${botText}`, 124, 55);
+        if (totalCurrent_mA > 0.5) {
+          ctx.fillStyle = '#80d8ff';
+          ctx.font = '3.5px "JetBrains Mono", monospace';
+          ctx.fillText(`${totalCurrent_mA} mA`, 124, 61);
+        }
       }
+    } else {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+      ctx.font = 'bold 4px "JetBrains Mono", monospace';
+      ctx.fillText('OFFLINE', 124, 55);
     }
 
     if (inst.selected) drawSelectionRect(ctx, 0, 0, 160, 96);

@@ -141,6 +141,9 @@ class CircuitCanvas {
     this.selectedWire = null;
     this.selectedAnnotation = null;
     this.selectedComponentLabel = null;
+    this.wireJumpArcs = true; // CAD-style bridge arcs for crossing orthogonal wires
+    this.wireTooltipEl = null;
+    this.quickControlsEl = null;
     this._hasStandalonePower = false;
 
     /* Electrical engine */
@@ -829,6 +832,102 @@ class CircuitCanvas {
     ctx.restore();
   }
 
+  _buildOrthogonalPath(ctx, pts, wire) {
+    if (!pts || pts.length < 2) return;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+
+    if (!this.wireJumpArcs || !wire || pts.length < 2) {
+      for (let i = 1; i < pts.length; i++) {
+        ctx.lineTo(pts[i].x, pts[i].y);
+      }
+      return;
+    }
+
+    const arcRadius = 5;
+    const minMargin = 8;
+
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+
+      // Only horizontal segments jump over vertical segments
+      const isHorizontal = Math.abs(p1.y - p2.y) < 0.5 && Math.abs(p1.x - p2.x) >= 16;
+      if (!isHorizontal) {
+        ctx.lineTo(p2.x, p2.y);
+        continue;
+      }
+
+      const y = p1.y;
+      const xMin = Math.min(p1.x, p2.x);
+      const xMax = Math.max(p1.x, p2.x);
+      const movingRight = p2.x > p1.x;
+
+      // Find all vertical crossings with other wires
+      const crossings = [];
+      for (const otherWire of this.wires) {
+        if (!otherWire || otherWire.id === wire.id) continue;
+        // Don't jump over wires sharing a terminal pin (common net junction)
+        if (otherWire.from?.instId === wire.from?.instId && otherWire.from?.pinId === wire.from?.pinId) continue;
+        if (otherWire.from?.instId === wire.to?.instId && otherWire.from?.pinId === wire.to?.pinId) continue;
+        if (otherWire.to?.instId === wire.from?.instId && otherWire.to?.pinId === wire.from?.pinId) continue;
+        if (otherWire.to?.instId === wire.to?.instId && otherWire.to?.pinId === wire.to?.pinId) continue;
+
+        const otherPath = this._wirePath(otherWire);
+        if (!otherPath || otherPath.type !== 'orthogonal' || !otherPath.pts) continue;
+        const opts = otherPath.pts;
+
+        for (let j = 0; j < opts.length - 1; j++) {
+          const o1 = opts[j];
+          const o2 = opts[j + 1];
+          // Check if other segment is vertical
+          if (Math.abs(o1.x - o2.x) < 0.5) {
+            const vx = o1.x;
+            const vyMin = Math.min(o1.y, o2.y);
+            const vyMax = Math.max(o1.y, o2.y);
+
+            if (vx >= xMin + minMargin && vx <= xMax - minMargin &&
+                y >= vyMin + minMargin && y <= vyMax - minMargin) {
+              crossings.push(vx);
+            }
+          }
+        }
+      }
+
+      if (crossings.length === 0) {
+        ctx.lineTo(p2.x, p2.y);
+        continue;
+      }
+
+      // Sort crossings in travel direction
+      if (movingRight) {
+        crossings.sort((a, b) => a - b);
+      } else {
+        crossings.sort((a, b) => b - a);
+      }
+
+      // Deduplicate crossings that are too close
+      const filtered = [];
+      for (const cx of crossings) {
+        if (filtered.length === 0 || Math.abs(cx - filtered[filtered.length - 1]) >= arcRadius * 2.2) {
+          filtered.push(cx);
+        }
+      }
+
+      for (const cx of filtered) {
+        if (movingRight) {
+          ctx.lineTo(cx - arcRadius, y);
+          ctx.arc(cx, y, arcRadius, Math.PI, 0, false);
+        } else {
+          ctx.lineTo(cx + arcRadius, y);
+          ctx.arc(cx, y, arcRadius, 0, Math.PI, true);
+        }
+      }
+
+      ctx.lineTo(p2.x, p2.y);
+    }
+  }
+
   _drawOrthogonalWire(ctx, pts, color, highlighted, wire) {
     if (!pts || pts.length < 2) return;
 
@@ -838,9 +937,7 @@ class CircuitCanvas {
       ctx.lineWidth = 8 / this.zoom;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, pts[0].y);
-      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      this._buildOrthogonalPath(ctx, pts, wire);
       ctx.stroke();
     }
 
@@ -854,9 +951,7 @@ class CircuitCanvas {
       ctx.shadowBlur = 6;
     }
 
-    ctx.beginPath();
-    ctx.moveTo(pts[0].x, pts[0].y);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    this._buildOrthogonalPath(ctx, pts, wire);
     ctx.stroke();
 
     // Animated marching current / signal flow (Phase 3)
@@ -879,9 +974,7 @@ class CircuitCanvas {
         ctx.setLineDash([dash, gap]);
         ctx.lineDashOffset = offset;
       }
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, pts[0].y);
-      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      this._buildOrthogonalPath(ctx, pts, wire);
       ctx.stroke();
       ctx.restore();
     }
@@ -1222,6 +1315,31 @@ class CircuitCanvas {
         if (wx >= rx && wx <= rx + rw && wy >= ry && wy <= ry + rh) {
           return { inst, ctrl };
         }
+      }
+    }
+    return null;
+  }
+
+  _hitTestMb102Jumper(wx, wy) {
+    for (const inst of this.components) {
+      if (inst.type !== 'mb102_power') continue;
+      const lx = wx - inst.x;
+      const ly = wy - inst.y;
+
+      // Top Jumper: x in [93, 117], y in [13, 29]
+      if (lx >= 93 && lx <= 117 && ly >= 13 && ly <= 29) {
+        let targetVoltage = null;
+        if (lx <= 101) targetVoltage = '5V';
+        else if (lx >= 109) targetVoltage = '3.3V';
+        return { inst, rail: 'top', targetVoltage };
+      }
+
+      // Bottom Jumper: x in [93, 117], y in [66, 82]
+      if (lx >= 93 && lx <= 117 && ly >= 66 && ly <= 82) {
+        let targetVoltage = null;
+        if (lx <= 101) targetVoltage = '5V';
+        else if (lx >= 109) targetVoltage = '3.3V';
+        return { inst, rail: 'bottom', targetVoltage };
       }
     }
     return null;
@@ -2531,7 +2649,10 @@ class CircuitCanvas {
     canvas.addEventListener('wheel', e => this._onWheel(e), { passive: false });
     canvas.addEventListener('dblclick', e => this._onDblClick(e));
     canvas.addEventListener('contextmenu', e => this._onContextMenu(e));
-    canvas.addEventListener('mouseleave', () => this._hidePinTooltip());
+    canvas.addEventListener('mouseleave', () => {
+      this._hidePinTooltip();
+      this._hideWireTooltip();
+    });
 
     // Touch events for mobile
     canvas.addEventListener('touchstart', e => this._onTouchStart(e), { passive: false });
@@ -2669,6 +2790,8 @@ class CircuitCanvas {
   }
 
   _onMouseDown(e) {
+    this._hideWireTooltip();
+    this._hidePinTooltip();
     const world = this._toWorld(e.offsetX, e.offsetY);
     this._lastMouse = { x: e.clientX, y: e.clientY };
 
@@ -2815,16 +2938,54 @@ class CircuitCanvas {
         return;
       }
 
-      // Inline toggle inside a component (Power/Output switches on bench supply)
+      // Inline toggle inside a component (Power/Output switches on bench supply, MB102 power button)
       const inlineHit = this._hitTestInlineToggle(world.x, world.y);
       if (inlineHit) {
         const { inst, ctrl } = inlineHit;
         inst.runtimeState = inst.runtimeState || {};
         const cur = Number(inst.runtimeState[ctrl.field] ?? inst.props?.[ctrl.field] ?? ctrl.min);
-        inst.runtimeState[ctrl.field] = cur > 0 ? ctrl.min : ctrl.max;
+        const nextVal = cur > 0 ? ctrl.min : ctrl.max;
+        inst.runtimeState[ctrl.field] = nextVal;
+        inst.props = inst.props || {};
+        inst.props[ctrl.field] = nextVal;
+        if (typeof this._onInteractiveInputChanged === 'function') {
+          this._onInteractiveInputChanged(inst, ctrl.field, nextVal);
+        }
         this._selectAll(false);
         inst.selected = true;
         this.selected = inst;
+        this._pushHistory();
+        this._onChanged();
+        this._recalculateNets();
+        return;
+      }
+
+      // MB102 Jumper click (switch top or bottom rail voltage directly on board)
+      const mbJumperHit = this._hitTestMb102Jumper(world.x, world.y);
+      if (mbJumperHit) {
+        const { inst, rail, targetVoltage } = mbJumperHit;
+        const propField = rail === 'top' ? 'topVoltage' : 'bottomVoltage';
+        const curVal = String(inst.runtimeState?.[propField] ?? inst.props?.[propField] ?? (rail === 'top' ? '5V' : '3.3V'));
+        let nextVal = targetVoltage;
+        if (!nextVal || nextVal === curVal) {
+          // Cycle: 5V -> 3.3V -> OFF -> 5V
+          if (curVal === '5V') nextVal = '3.3V';
+          else if (curVal === '3.3V') nextVal = 'OFF';
+          else nextVal = '5V';
+        }
+        inst.props = inst.props || {};
+        inst.runtimeState = inst.runtimeState || {};
+        inst.props[propField] = nextVal;
+        inst.runtimeState[propField] = nextVal;
+        if (typeof this._onInteractiveInputChanged === 'function') {
+          this._onInteractiveInputChanged(inst, propField, nextVal);
+        }
+        this._selectAll(false);
+        inst.selected = true;
+        this.selected = inst;
+        this._pushHistory();
+        this._onChanged();
+        this._recalculateNets();
         return;
       }
 
@@ -2921,6 +3082,7 @@ class CircuitCanvas {
         this._selectAll(false);
         this.selectedWire = wireDetail.wire;
         this.selected = null;
+        this._notifySelectionChange();
 
         const wire = wireDetail.wire;
 
@@ -2981,6 +3143,7 @@ class CircuitCanvas {
         compHit.selected = true;
         this.selected = compHit;
         this.selectedWire = null;
+        this._notifySelectionChange();
 
         // --- push_button: momentary presses while held, latching toggles ---
         if (compHit.type === 'push_button') {
@@ -3010,6 +3173,7 @@ class CircuitCanvas {
       this._selectAll(false);
       this.selected = null;
       this.selectedWire = null;
+      this._notifySelectionChange();
 
       // Start pan
       this.mode = 'panning';
@@ -3028,6 +3192,8 @@ class CircuitCanvas {
       this.panY += dy;
       this._lastMouse = { x: e.clientX, y: e.clientY };
       this._hidePinTooltip();
+      this._hideWireTooltip();
+      this._positionQuickControls(this.selected);
       return;
     }
 
@@ -3078,6 +3244,8 @@ class CircuitCanvas {
       this.dragging.moved = true;
       this._lastMouse = { x: e.clientX, y: e.clientY };
       this._hidePinTooltip();
+      this._hideWireTooltip();
+      this._positionQuickControls(this.dragging.inst);
       return;
     }
 
@@ -3233,17 +3401,20 @@ class CircuitCanvas {
     if (this.mode === 'wiring') {
       this.wireMouse = world;
       this._hidePinTooltip();
+      this._hideWireTooltip();
       return;
     }
 
     if (this.mode === 'placing') {
       this.placingMouse = world;
       this._hidePinTooltip();
+      this._hideWireTooltip();
       return;
     }
     if (this.mode === 'placingText') {
       this.placingMouse = world;
       this._hidePinTooltip();
+      this._hideWireTooltip();
       return;
     }
 
@@ -3274,27 +3445,36 @@ class CircuitCanvas {
     if (tagHover) {
       this.canvas.style.cursor = 'pointer';
       this._hidePinTooltip();
+      this._hideWireTooltip();
     } else if (pin) {
       this.canvas.style.cursor = 'crosshair';
+      this._hideWireTooltip();
       this._showPinTooltip(pin, e);
     } else if (boardResetHover) {
       this.canvas.style.cursor = 'pointer';
       this._hidePinTooltip();
-    } else if (irRemoteHover) {
+      this._hideWireTooltip();
+    } else if (irRemoteHover || this._hitTestInlineToggle(world.x, world.y) || this._hitTestMb102Jumper(world.x, world.y)) {
       this.canvas.style.cursor = 'pointer';
       this._hidePinTooltip();
+      this._hideWireTooltip();
     } else {
       this._hidePinTooltip();
       if (this._hitTestAnnotation(world.x, world.y)) {
         this.canvas.style.cursor = 'move';
+        this._hideWireTooltip();
       } else if (this._hitTestComponentLabel(world.x, world.y)) {
         this.canvas.style.cursor = 'move';
+        this._hideWireTooltip();
       } else if (comp) {
         this.canvas.style.cursor = 'move';
+        this._hideWireTooltip();
       } else if (wireDetail) {
         this.canvas.style.cursor = 'grab';
+        this._showWireTooltip(wireDetail.wire, e);
       } else {
         this.canvas.style.cursor = '';
+        this._hideWireTooltip();
       }
     }
   }
@@ -3717,6 +3897,7 @@ class CircuitCanvas {
       }
     }
 
+    this._positionQuickControls(this.selected);
     this._render();
   }
 
@@ -3798,6 +3979,7 @@ class CircuitCanvas {
   }
 
   _notifySelectionChange() {
+    this._updateQuickControls();
     if (typeof this.onSelectionChange === 'function') {
       try {
         this.onSelectionChange({
@@ -4012,6 +4194,13 @@ class CircuitCanvas {
         }
       }
 
+      if (this.engine) {
+        const probeV = this.engine.getVoltageAtPin(inst.id, pin.id);
+        if (probeV != null && inst.type !== 'potentiometer' && !inst.type.includes('transistor') && !inst.type.includes('fet')) {
+          addRow('Live Voltage', probeV.toFixed(3) + ' V', probeV >= 2.5 ? 'pin-tip-high' : (probeV > 0.5 ? 'pin-tip-med' : 'pin-tip-low'));
+        }
+      }
+
       el.appendChild(frag);
     }
 
@@ -4028,6 +4217,260 @@ class CircuitCanvas {
   _hidePinTooltip() {
     this._tipKey = null;
     if (this.tooltipEl) this.tooltipEl.classList.add('hidden');
+  }
+
+  _showWireTooltip(wire, e) {
+    if (this.mode !== 'idle' || !wire) return;
+    if (!this.wireTooltipEl) this.wireTooltipEl = document.getElementById('wire-tooltip');
+    const el = this.wireTooltipEl;
+    if (!el) return;
+
+    const fromComp = this.components.find(c => c.id === wire.from?.instId);
+    const toComp = this.components.find(c => c.id === wire.to?.instId);
+    const fromDef = fromComp && window.ArduinoComponents?.COMPONENT_DEFS?.[fromComp.type];
+    const toDef = toComp && window.ArduinoComponents?.COMPONENT_DEFS?.[toComp.type];
+    const fromName = fromComp?.props?.label || fromDef?.name || wire.from?.instId || 'Net';
+    const toName = toComp?.props?.label || toDef?.name || wire.to?.instId || 'Net';
+
+    // Voltage telemetry
+    let v = null;
+    if (this.engine) {
+      const vf = this.engine.getVoltageAtPin(wire.from?.instId, wire.from?.pinId);
+      const vt = this.engine.getVoltageAtPin(wire.to?.instId, wire.to?.pinId);
+      v = (vf != null) ? vf : vt;
+    }
+
+    const sim = window.ArduinoSim;
+    let logicState = null;
+    if (sim && sim.isRunning) {
+      const pinNumFrom = this._pinToNumber(wire.from?.pinId);
+      const pinNumTo = this._pinToNumber(wire.to?.pinId);
+      const num = (pinNumFrom != null) ? pinNumFrom : pinNumTo;
+      if (num != null && sim.pinStates) {
+        const raw = sim.pinStates[`pin_${num}`];
+        if (raw !== undefined) {
+          if (raw === 0) logicState = 'LOW (0V)';
+          else if (raw === 1 || raw === 255) logicState = 'HIGH (5V)';
+          else logicState = `PWM (${raw}/255)`;
+          if (v == null) {
+            v = raw === 0 ? 0 : (raw === 1 ? 5 : (raw / 255 * 5));
+          }
+        }
+      }
+    }
+
+    if (v == null) {
+      const fromType = this._getPinType(wire.from?.instId, wire.from?.pinId);
+      const toType = this._getPinType(wire.to?.instId, wire.to?.pinId);
+      if (fromType === 'gnd' || toType === 'gnd') v = 0;
+      else if (fromType === 'power' || toType === 'power') {
+        if (wire.from?.pinId === '3V3' || wire.to?.pinId === '3V3') v = 3.3;
+        else v = 5.0;
+      }
+    }
+
+    const conducting = this._isWireConducting(wire);
+
+    // Determine badge style
+    let badgeCls = 'v-signal';
+    let badgeText = 'SIGNAL';
+    if (v != null) {
+      if (v >= 3.0) {
+        badgeCls = 'v-high';
+        badgeText = `${v.toFixed(1)}V`;
+      } else if (v > 0.5) {
+        badgeCls = 'v-med';
+        badgeText = `${v.toFixed(1)}V`;
+      } else {
+        badgeCls = 'v-low';
+        badgeText = `${v.toFixed(1)}V`;
+      }
+    }
+
+    el.innerHTML = `
+      <div class="wire-tip-header">
+        <span class="wire-tip-title">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Wire Probe
+        </span>
+        <span class="wire-tip-badge ${badgeCls}">${badgeText}</span>
+      </div>
+      <div class="pin-tip-row">
+        <span>From</span><b>${fromName} · ${wire.from?.pinId || ''}</b>
+      </div>
+      <div class="pin-tip-row">
+        <span>To</span><b>${toName} · ${wire.to?.pinId || ''}</b>
+      </div>
+      <div class="pin-tip-row">
+        <span>Voltage</span><b>${v != null ? (v >= 0 ? v.toFixed(3) + ' V' : '0.000 V') : 'Floating'}</b>
+      </div>
+      ${logicState ? `<div class="pin-tip-row"><span>Logic</span><b>${logicState}</b></div>` : ''}
+      <div class="pin-tip-row">
+        <span>Current Flow</span><b style="color:${conducting ? '#00e676' : '#8b949e'}">${conducting ? 'Conducting (Live)' : 'Static / Low'}</b>
+      </div>
+      ${wire.color ? `<div class="pin-tip-row"><span>Color</span><b style="color:${wire.color}">● ${wire.color}</b></div>` : ''}
+    `;
+
+    const pad = 14;
+    el.classList.remove('hidden');
+    el.style.left = `${e.clientX + pad}px`;
+    el.style.top = `${e.clientY + pad}px`;
+    const r = el.getBoundingClientRect();
+    if (r.right > window.innerWidth - 8) el.style.left = `${Math.max(8, e.clientX - r.width - pad)}px`;
+    if (r.bottom > window.innerHeight - 8) el.style.top = `${Math.max(8, e.clientY - r.height - pad)}px`;
+  }
+
+  _hideWireTooltip() {
+    if (this.wireTooltipEl) this.wireTooltipEl.classList.add('hidden');
+  }
+
+  _findInteractiveControl(inst) {
+    if (!inst) return null;
+    const def = window.ArduinoComponents?.COMPONENT_DEFS?.[inst.type];
+    if (!def || !Array.isArray(def.interactive) || def.interactive.length === 0) return null;
+    const slider = def.interactive.find(c => c.field && (c.min !== undefined && c.max !== undefined) && c.type !== 'toggle');
+    if (slider) return slider;
+    return def.interactive[0] || null;
+  }
+
+  _updateQuickControls() {
+    if (!this.selected || this.selectedPin || this.selectedWire || this.selectedAnnotation) {
+      this._hideQuickControls();
+      return;
+    }
+    if (this._qcDismissedFor === this.selected.id) {
+      return;
+    }
+    const ctrl = this._findInteractiveControl(this.selected);
+    if (ctrl) {
+      this._showQuickControls(this.selected, ctrl);
+    } else {
+      this._hideQuickControls();
+    }
+  }
+
+  _showQuickControls(inst, ctrl) {
+    if (!this.quickControlsEl) {
+      this.quickControlsEl = document.getElementById('canvas-quick-controls');
+    }
+    const el = this.quickControlsEl;
+    if (!el || !inst || !ctrl) return;
+
+    this._qcTargetInst = inst;
+    this._qcTargetCtrl = ctrl;
+
+    const def = window.ArduinoComponents?.COMPONENT_DEFS?.[inst.type];
+    const compLabel = inst.props?.label || def?.name || inst.type;
+    const curVal = (inst.props && inst.props[ctrl.field] !== undefined)
+      ? inst.props[ctrl.field]
+      : (inst.runtimeState && inst.runtimeState[ctrl.field] !== undefined ? inst.runtimeState[ctrl.field] : (ctrl.min ?? 0));
+
+    el.innerHTML = '';
+
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'qc-icon';
+    iconSpan.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`;
+    el.appendChild(iconSpan);
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'qc-name';
+    nameSpan.textContent = ctrl.label || compLabel;
+    nameSpan.title = compLabel;
+    el.appendChild(nameSpan);
+
+    const valSpan = document.createElement('span');
+    valSpan.className = 'qc-val';
+    const unit = ctrl.unit ? ` ${ctrl.unit}` : '';
+    valSpan.textContent = `${curVal}${unit}`;
+
+    if (ctrl.min !== undefined && ctrl.max !== undefined && ctrl.type !== 'toggle') {
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      slider.className = 'qc-slider';
+      slider.min = ctrl.min;
+      slider.max = ctrl.max;
+      slider.step = ctrl.step || 1;
+      slider.value = curVal;
+
+      slider.addEventListener('mousedown', (e) => e.stopPropagation());
+      slider.addEventListener('pointerdown', (e) => e.stopPropagation());
+      slider.addEventListener('input', (e) => {
+        const val = Number(e.target.value);
+        if (!inst.props) inst.props = {};
+        inst.props[ctrl.field] = val;
+        if (!inst.runtimeState) inst.runtimeState = {};
+        inst.runtimeState[ctrl.field] = val;
+        valSpan.textContent = `${val}${unit}`;
+        if (typeof this._onInteractiveInputChanged === 'function') {
+          this._onInteractiveInputChanged(inst, ctrl.field, val);
+        }
+        this._onChanged();
+        const propInput = document.querySelector(`.prop-input[name="${ctrl.field}"]`);
+        if (propInput) {
+          propInput.value = val;
+        }
+      });
+      el.appendChild(slider);
+    } else if (ctrl.type === 'toggle' || ctrl.type === 'button') {
+      const toggleBtn = document.createElement('button');
+      toggleBtn.className = 'btn-xs';
+      toggleBtn.style.padding = '2px 8px';
+      toggleBtn.style.fontSize = '10px';
+      toggleBtn.textContent = curVal ? 'ON' : 'OFF';
+      toggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const next = curVal ? 0 : 1;
+        if (!inst.props) inst.props = {};
+        inst.props[ctrl.field] = next;
+        if (!inst.runtimeState) inst.runtimeState = {};
+        inst.runtimeState[ctrl.field] = next;
+        toggleBtn.textContent = next ? 'ON' : 'OFF';
+        valSpan.textContent = next ? 'ON' : 'OFF';
+        if (typeof this._onInteractiveInputChanged === 'function') {
+          this._onInteractiveInputChanged(inst, ctrl.field, next);
+        }
+        this._onChanged();
+      });
+      el.appendChild(toggleBtn);
+    }
+
+    el.appendChild(valSpan);
+
+    const closeBtn = document.createElement('span');
+    closeBtn.className = 'qc-close';
+    closeBtn.innerHTML = '✕';
+    closeBtn.title = 'Dismiss quick controls';
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._hideQuickControls();
+      this._qcDismissedFor = inst.id;
+    });
+    el.appendChild(closeBtn);
+
+    el.classList.remove('hidden');
+    this._positionQuickControls(inst);
+  }
+
+  _positionQuickControls(inst = this._qcTargetInst) {
+    if (!this.quickControlsEl || this.quickControlsEl.classList.contains('hidden') || !inst) return;
+    const def = window.ArduinoComponents?.COMPONENT_DEFS?.[inst.type];
+    const w = def?.width || 40;
+    const worldX = inst.x + w / 2;
+    const worldY = inst.y;
+
+    const screenX = worldX * this.zoom + this.panX;
+    const screenY = worldY * this.zoom + this.panY;
+
+    this.quickControlsEl.style.left = `${screenX}px`;
+    this.quickControlsEl.style.top = `${screenY}px`;
+  }
+
+  _hideQuickControls() {
+    this._qcTargetInst = null;
+    this._qcTargetCtrl = null;
+    if (this.quickControlsEl) {
+      this.quickControlsEl.classList.add('hidden');
+    }
   }
 
   _hitTestComp(wx, wy) {
@@ -4224,6 +4667,7 @@ class CircuitCanvas {
   _updateZoomDisplay() {
     const el = document.getElementById('zoom-display');
     if (el) el.textContent = `${Math.round(this.zoom * 100)}%`;
+    this._positionQuickControls(this.selected);
   }
 
   _onChanged() {
@@ -5405,10 +5849,88 @@ class CircuitCanvas {
         }
         case 'mb102_power': {
           const mbPowered = Boolean(inst.runtimeState?.powered ?? inst.props?.powered ?? 1);
-          if (mbPowered) {
-            // MB102 is always CV mode with fixed regulators
-            inst.runtimeState.mode = 'CV';
+          inst.runtimeState = inst.runtimeState || {};
+          if (!mbPowered) {
+            inst.runtimeState.actualCurrent_mA = 0;
+            inst.runtimeState.iTop_mA = 0;
+            inst.runtimeState.iBot_mA = 0;
+            inst.runtimeState.iAux_mA = 0;
+            inst.runtimeState.overload = false;
+            inst.runtimeState.mode = 'OFF';
+            break;
           }
+
+          const topV = String(inst.runtimeState?.topVoltage ?? inst.props?.topVoltage ?? '5V');
+          const botV = String(inst.runtimeState?.bottomVoltage ?? inst.props?.bottomVoltage ?? '3.3V');
+          const voltageMap = { '5V': 5.0, '3.3V': 3.3, 'OFF': 0 };
+
+          let totalCurrentA = 0;
+          let iTopA = 0;
+          let iBotA = 0;
+          let iAuxA = 0;
+
+          // Top rail current draw
+          if (voltageMap[topV] > 0) {
+            const net = this._tracePinNet(inst.id, 'vcc_t');
+            if (net.grounds.length > 0) {
+              let invRSum = 0;
+              for (const g of net.grounds) {
+                invRSum += 1 / Math.max(0.1, g.resistance || 0.1);
+              }
+              const loadR = invRSum > 0 ? 1 / invRSum : 999999;
+              iTopA = voltageMap[topV] / Math.max(0.1, loadR);
+              totalCurrentA += iTopA;
+            }
+          }
+
+          // Bottom rail current draw
+          if (voltageMap[botV] > 0) {
+            const net = this._tracePinNet(inst.id, 'vcc_b');
+            if (net.grounds.length > 0) {
+              let invRSum = 0;
+              for (const g of net.grounds) {
+                invRSum += 1 / Math.max(0.1, g.resistance || 0.1);
+              }
+              const loadR = invRSum > 0 ? 1 / invRSum : 999999;
+              iBotA = voltageMap[botV] / Math.max(0.1, loadR);
+              totalCurrentA += iBotA;
+            }
+          }
+
+          // Aux 5V current draw
+          const netAux5 = this._tracePinNet(inst.id, 'aux_5v');
+          if (netAux5.grounds.length > 0) {
+            let invRSum = 0;
+            for (const g of netAux5.grounds) {
+              invRSum += 1 / Math.max(0.1, g.resistance || 0.1);
+            }
+            const loadR = invRSum > 0 ? 1 / invRSum : 999999;
+            const iAux5 = 5.0 / Math.max(0.1, loadR);
+            iAuxA += iAux5;
+            totalCurrentA += iAux5;
+          }
+
+          // Aux 3.3V current draw
+          const netAux3 = this._tracePinNet(inst.id, 'aux_3v3');
+          if (netAux3.grounds.length > 0) {
+            let invRSum = 0;
+            for (const g of netAux3.grounds) {
+              invRSum += 1 / Math.max(0.1, g.resistance || 0.1);
+            }
+            const loadR = invRSum > 0 ? 1 / invRSum : 999999;
+            const iAux3 = 3.3 / Math.max(0.1, loadR);
+            iAuxA += iAux3;
+            totalCurrentA += iAux3;
+          }
+
+          const totalCurrent_mA = totalCurrentA * 1000;
+          const isOverload = totalCurrent_mA > 800;
+          inst.runtimeState.overload = isOverload;
+          inst.runtimeState.mode = isOverload ? 'OVERLOAD' : 'CV';
+          inst.runtimeState.actualCurrent_mA = Math.round(totalCurrent_mA * 10) / 10;
+          inst.runtimeState.iTop_mA = Math.round(iTopA * 1000 * 10) / 10;
+          inst.runtimeState.iBot_mA = Math.round(iBotA * 1000 * 10) / 10;
+          inst.runtimeState.iAux_mA = Math.round(iAuxA * 1000 * 10) / 10;
           break;
         }
         case 'buzzer': {
@@ -7410,25 +7932,29 @@ class CircuitCanvas {
       // 2b. MB102 Breadboard Power Supply
       if (inst.type === 'mb102_power') {
         const mbPowered = Boolean(inst.runtimeState?.powered ?? inst.props?.powered ?? 1);
-        const topV = inst.props?.topVoltage ?? '5V';
-        const botV = inst.props?.bottomVoltage ?? '3.3V';
+        const topV = inst.runtimeState?.topVoltage ?? inst.props?.topVoltage ?? '5V';
+        const botV = inst.runtimeState?.bottomVoltage ?? inst.props?.bottomVoltage ?? '3.3V';
         const voltageMap = { '5V': 5.0, '3.3V': 3.3, 'OFF': 0 };
 
         if (mbPowered) {
-          if ((current.pinId === 'vcc_t' || current.pinId === 'aux_5v') && voltageMap[topV] > 0) {
-            sources.push({ type: topV, voltage: voltageMap[topV], rawVal: 255, resistance: current.resistance });
-          }
-          if (current.pinId === 'aux_3v3' && voltageMap[botV] > 0) {
-            sources.push({ type: '3.3V', voltage: 3.3, rawVal: 168, resistance: current.resistance });
+          if (current.pinId === 'vcc_t' && voltageMap[topV] > 0) {
+            sources.push({ type: topV, voltage: voltageMap[topV], rawVal: 255, resistance: current.resistance, instId: inst.id, pinId: 'vcc_t' });
           }
           if (current.pinId === 'vcc_b' && voltageMap[botV] > 0) {
-            sources.push({ type: botV, voltage: voltageMap[botV], rawVal: 168, resistance: current.resistance });
+            sources.push({ type: botV, voltage: voltageMap[botV], rawVal: 168, resistance: current.resistance, instId: inst.id, pinId: 'vcc_b' });
+          }
+          if (current.pinId === 'aux_5v') {
+            sources.push({ type: '5V', voltage: 5.0, rawVal: 255, resistance: current.resistance, instId: inst.id, pinId: 'aux_5v' });
+          }
+          if (current.pinId === 'aux_3v3') {
+            sources.push({ type: '3.3V', voltage: 3.3, rawVal: 168, resistance: current.resistance, instId: inst.id, pinId: 'aux_3v3' });
           }
         }
         if (current.pinId === 'gnd_t' || current.pinId === 'gnd_b' || current.pinId === 'aux_gnd') {
           grounds.push({ type: 'gnd', instId: inst.id, pinId: current.pinId, resistance: current.resistance });
         }
-        continue;
+        // Do NOT continue — let wire-following at bottom of loop execute
+        // so the trace can leave the mb102_power through connected wires
       }
 
       // 2c. Benchtop DC Power Supply (split-rail: +V, -V, GND, 5V)

@@ -541,28 +541,29 @@ Canvas re-draws LED with glow effect at 60 FPS</pre>
 <h2 id="power-components">11. Power Components (MB102, Bench Supply, 12V Bulb)</h2>
 
 <h3>11.1 MB102 Power Supply Module</h3>
-<p>The MB102 is a breadboard-friendly power supply module with selectable voltage rails.</p>
+<p>The MB102 is a breadboard-friendly power supply module with selectable voltage rails, DC barrel jack (6.5&ndash;12V), USB 5V input/output, and dual AMS1117 linear voltage regulators.</p>
 <table>
 <tr><th>Pin</th><th>Side</th><th>Type</th><th>Description</th></tr>
-<tr><td><code>vcc_t</code></td><td>top</td><td>POWER</td><td>Top rail voltage output (5V or 3.3V selectable)</td></tr>
-<tr><td><code>gnd_t</code></td><td>top</td><td>POWER</td><td>Top rail ground</td></tr>
-<tr><td><code>vcc_b</code></td><td>bottom</td><td>POWER</td><td>Bottom rail voltage output</td></tr>
-<tr><td><code>gnd_b</code></td><td>bottom</td><td>POWER</td><td>Bottom rail ground</td></tr>
-<tr><td><code>aux_5v</code></td><td>left</td><td>POWER</td><td>Auxiliary 5V output</td></tr>
-<tr><td><code>aux_3v3</code></td><td>left</td><td>POWER</td><td>Auxiliary 3.3V output</td></tr>
-<tr><td><code>aux_gnd</code></td><td>left</td><td>POWER</td><td>Auxiliary ground</td></tr>
+<tr><td><code>vcc_t</code></td><td>top</td><td>POWER</td><td>Top rail voltage output (5V, 3.3V, or OFF)</td></tr>
+<tr><td><code>gnd_t</code></td><td>top</td><td>GND</td><td>Top rail ground</td></tr>
+<tr><td><code>vcc_b</code></td><td>bottom</td><td>POWER</td><td>Bottom rail voltage output (5V, 3.3V, or OFF)</td></tr>
+<tr><td><code>gnd_b</code></td><td>bottom</td><td>GND</td><td>Bottom rail ground</td></tr>
+<tr><td><code>aux_5v</code></td><td>right</td><td>POWER</td><td>Auxiliary 5.0V regulated output</td></tr>
+<tr><td><code>aux_3v3</code></td><td>right</td><td>POWER</td><td>Auxiliary 3.3V regulated output</td></tr>
+<tr><td><code>aux_gnd</code></td><td>right</td><td>GND</td><td>Auxiliary ground</td></tr>
 </table>
 
 <p><strong>Interactive Controls:</strong></p>
 <ul>
-<li><strong>Power Toggle</strong> &mdash; ON/OFF switch (inline on front panel)</li>
-<li><strong>Top Rail Voltage</strong> &mdash; Dropdown: 5V / 3.3V / OFF</li>
-<li><strong>Bottom Rail Voltage</strong> &mdash; Dropdown: 3.3V / 5V / OFF</li>
+<li><strong>Power Push Button</strong> &mdash; Click the red latching push button directly on the board to toggle power ON/OFF (LED glows green when active).</li>
+<li><strong>Top Rail Jumper</strong> &mdash; Click the yellow jumper cap directly on the canvas to cycle between 5V, 3.3V, and OFF (or click the specific voltage side).</li>
+<li><strong>Bottom Rail Jumper</strong> &mdash; Click the bottom yellow jumper cap directly on the canvas to cycle between 3.3V, 5V, and OFF.</li>
+<li><strong>Property Inspector</strong> &mdash; Select the MB102 on canvas to access dropdown menus and status telemetry in the right panel.</li>
 </ul>
 
-<p><strong>Simulation:</strong> When powered on, the MB102 acts as a voltage source at its output pins. The top rail outputs the selected voltage (5V or 3.3V), and the bottom rail outputs independently. Both rails share common ground.</p>
+<p><strong>Simulation & Protection:</strong> When powered on, the MB102 acts as a dual-rail voltage source at its output pins and auxiliary headers. Both rails share a common ground. The simulation models thermal and overcurrent protection (~700&ndash;800mA limit) with live current telemetry in mA and overload warning detection.</p>
 
-<div class="tip"><strong>Usage:</strong> Connect <code>vcc_t</code> to your circuit's VCC rail and <code>gnd_t</code> to the ground rail. The MB102 is recognized by <code>_tracePinNet()</code> as a voltage source, so LEDs and other components will light up when connected correctly.</div>
+<div class="tip"><strong>Usage:</strong> Connect <code>vcc_t</code> to your circuit's VCC rail and <code>gnd_t</code> to the ground rail. The MB102 is recognized by <code>_tracePinNet()</code> as a voltage source, so LEDs, sensors, and ICs will light up and operate when connected correctly.</div>
 
 <h3>11.2 Benchtop DC Power Supply</h3>
 <p>A full-featured lab bench power supply with digital display, voltage/current knobs, and binding posts.</p>

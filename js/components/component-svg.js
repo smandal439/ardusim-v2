@@ -592,6 +592,35 @@
         </svg>`;
       },
 
+      mb102_power() {
+        return `<svg class="comp-svg-preview" viewBox="0 0 36 36" width="34" height="34" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Stepped MB102 PCB -->
+          <path d="M 3 6 L 33 6 L 33 13 L 29 13 L 29 23 L 33 23 L 33 30 L 3 30 Z" fill="#14171a" stroke="#2c333a" stroke-width="0.8"/>
+          <!-- DC Barrel Jack -->
+          <rect x="3" y="8" width="7" height="6.5" rx="0.8" fill="#212529" stroke="#78909c" stroke-width="0.5"/>
+          <circle cx="5" cy="11.2" r="1" fill="#ffd54f"/>
+          <!-- USB Port -->
+          <rect x="3" y="19" width="7" height="7" rx="0.8" fill="#b0bec5" stroke="#78909c" stroke-width="0.5"/>
+          <rect x="5.5" y="21" width="3" height="3" fill="#263238"/>
+          <!-- Power Button (Red) -->
+          <rect x="12" y="13.5" width="5.5" height="5.5" rx="0.6" fill="#1a1d20" stroke="#37474f" stroke-width="0.4"/>
+          <circle cx="14.7" cy="16.2" r="2" fill="#d32f2f"/>
+          <!-- Power LED (Green) -->
+          <circle cx="14.7" cy="9.5" r="1.2" fill="#00e676"/>
+          <!-- Regulators (AMS1117) -->
+          <rect x="19.5" y="8.5" width="4.5" height="4.5" rx="0.5" fill="#263238"/>
+          <rect x="19.5" y="21" width="4.5" height="4.5" rx="0.5" fill="#263238"/>
+          <!-- Jumper blocks (Yellow) -->
+          <rect x="25" y="9" width="3.5" height="2.5" rx="0.4" fill="#fbc02d"/>
+          <rect x="25" y="22.5" width="3.5" height="2.5" rx="0.4" fill="#fbc02d"/>
+          <!-- Rail pins -->
+          <circle cx="31.5" cy="8.5" r="0.8" fill="#e53935"/>
+          <circle cx="31.5" cy="11" r="0.8" fill="#1e88e5"/>
+          <circle cx="31.5" cy="25" r="0.8" fill="#e53935"/>
+          <circle cx="31.5" cy="27.5" r="0.8" fill="#1e88e5"/>
+        </svg>`;
+      },
+
       multimeter() {
         return `<svg class="comp-svg-preview" viewBox="0 0 36 36" width="34" height="34" fill="none" xmlns="http://www.w3.org/2000/svg">
           <rect x="9" y="3" width="18" height="30" rx="3.5" fill="#fbc02d" stroke="#f57f17" stroke-width="1"/>
@@ -701,6 +730,7 @@
       capacitor: 'Capacitor',
       breadboard: '830 Tie-Pt',
       breadboard_small: '400 Tie-Pt',
+      mb102_power: 'Dual-Rail PSU',
       diode_1n4007: 'Diode',
       npn_transistor: 'TO-92 NPN',
       pnp_transistor: 'TO-92 PNP',

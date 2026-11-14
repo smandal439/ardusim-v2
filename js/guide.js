@@ -2235,16 +2235,24 @@ void loop() {
   /* --- POWER --- */
   mb102_power: {
     id: 'mb102_power', name: 'MB102 Power Supply', icon: '\u26a1', category: 'Power',
-    longDesc: 'MB102 breadboard power supply module with DC barrel jack and USB input. Dual AMS1117 regulators provide switchable 3.3 V / 5 V output to top and bottom breadboard rails independently.',
-    use: 'Powering breadboard circuits. Plug into the breadboard power rails or connect via pin headers.',
+    longDesc: 'MB102 breadboard power supply module with DC barrel jack (6.5–12 V) and USB 5 V input/output. Dual AMS1117 linear regulators provide switchable 3.3 V / 5 V output to top and bottom breadboard rails independently, plus dedicated 3.3 V, 5 V, and GND auxiliary pin headers with thermal/current overload protection (~700 mA limit).',
+    use: 'Powering breadboard circuits. Click the red button directly on the board to toggle power; click the top/bottom jumper caps to cycle rail voltages (5V, 3.3V, OFF); or connect wires directly to the rail or auxiliary pins.',
     pins: {
-      vcc_t: { label: 'VCC_TOP', type: 'power', desc: 'Top rail positive output.' }, gnd_t: { label: 'GND_TOP', type: 'gnd', desc: 'Top rail ground.' },
-      aux_gnd: { label: 'GND', type: 'gnd', desc: 'Auxiliary ground.' }, aux_3v3: { label: '3.3V', type: 'power', desc: '3.3 V auxiliary output.' }, aux_5v: { label: '5V', type: 'power', desc: '5 V auxiliary output.' },
-      vcc_b: { label: 'VCC_BOT', type: 'power', desc: 'Bottom rail positive output.' }, gnd_b: { label: 'GND_BOT', type: 'gnd', desc: 'Bottom rail ground.' },
+      vcc_t: { label: 'VCC_TOP', type: 'power', desc: 'Top rail positive output (selectable 5V, 3.3V, or OFF).' },
+      gnd_t: { label: 'GND_TOP', type: 'gnd', desc: 'Top rail ground.' },
+      aux_3v3: { label: '3.3V', type: 'power', desc: 'Auxiliary regulated 3.3 V output.' },
+      aux_5v: { label: '5V', type: 'power', desc: 'Auxiliary regulated 5.0 V output.' },
+      aux_gnd: { label: 'GND', type: 'gnd', desc: 'Auxiliary common ground.' },
+      vcc_b: { label: 'VCC_BOT', type: 'power', desc: 'Bottom rail positive output (selectable 5V, 3.3V, or OFF).' },
+      gnd_b: { label: 'GND_BOT', type: 'gnd', desc: 'Bottom rail ground.' },
     },
-    props: { powered: 'Power switch (0=off, 1=on).', topVoltage: 'Top rail voltage: OFF, 3.3V, or 5V.', bottomVoltage: 'Bottom rail voltage: OFF, 3.3V, or 5V.' },
-    wiring: 'Plug directly onto breadboard power rails, or wire VCC/GND pins to your circuit.',
-    code: '// Power module is passive — no code needed.',
+    props: {
+      powered: 'Power switch (0=off, 1=on). Click the red button directly on the board.',
+      topVoltage: 'Top rail voltage: 5V, 3.3V, or OFF. Click the top jumper cap to toggle.',
+      bottomVoltage: 'Bottom rail voltage: 5V, 3.3V, or OFF. Click the bottom jumper cap to toggle.',
+    },
+    wiring: 'Connect vcc_t and gnd_t to the breadboard top rail (+/-), and vcc_b and gnd_b to the bottom rail (+/-), or connect directly to aux headers.',
+    code: '// Power module is hardware — no microcontroller code required.',
   },
 
   bench_power_supply: {
