@@ -1481,6 +1481,61 @@ class CircuitCanvas {
     return result ? result.inst : null;
   }
 
+  _getLocalCoords(inst, wx, wy) {
+    const defs = window.ArduinoComponents && window.ArduinoComponents.COMPONENT_DEFS;
+    const def = defs && defs[inst.type];
+    const w = def ? def.width : (inst.width || 40);
+    const h = def ? def.height : (inst.height || 40);
+    const cx = inst.x + w / 2;
+    const cy = inst.y + h / 2;
+    let dx = wx - cx;
+    let dy = wy - cy;
+    const rot = ((inst.rotation || 0) % 4 + 4) % 4;
+    for (let i = 0; i < rot; i++) {
+      const t = dx;
+      dx = dy;
+      dy = -t;
+    }
+    return { lx: dx + w / 2, ly: dy + h / 2 };
+  }
+
+  _hitTestBoardReset(wx, wy) {
+    if (!this.components) return null;
+    for (const inst of this.components) {
+      if (inst.type === 'arduino_uno') {
+        const { lx, ly } = this._getLocalCoords(inst, wx, wy);
+        // Uno Reset button switch body is at x: 9..21, y: 19..29, actuator center at (15, 24)
+        if (lx >= 7 && lx <= 23 && ly >= 16 && ly <= 32) {
+          return { inst, boardType: 'arduino_uno' };
+        }
+      } else if (inst.type === 'arduino_nano') {
+        const { lx, ly } = this._getLocalCoords(inst, wx, wy);
+        // Nano Reset button at x: 28..40, y: 33..47, center at (34, 40)
+        if (lx >= 26 && lx <= 42 && ly >= 31 && ly <= 49) {
+          return { inst, boardType: 'arduino_nano' };
+        }
+      } else if (inst.type === 'esp32_devkit_v1') {
+        const { lx, ly } = this._getLocalCoords(inst, wx, wy);
+        // ESP32 EN (reset) button at x: 24..36, y: 240..250
+        if (lx >= 22 && lx <= 38 && ly >= 238 && ly <= 252) {
+          return { inst, boardType: 'esp32_devkit_v1' };
+        }
+      }
+    }
+    return null;
+  }
+
+  _handleBoardResetClick(inst) {
+    if (window.App && typeof window.App.resetBoard === 'function') {
+      window.App.resetBoard(inst);
+    } else {
+      const sim = this._getSimForInst ? this._getSimForInst(inst) : (window.ArduinoSim || null);
+      if (sim && typeof sim.reset === 'function') {
+        sim.reset();
+      }
+    }
+  }
+
   _updateSliderValue(drag, wx, wy) {
     const { inst, ctrl, rect } = drag;
 
@@ -2678,6 +2733,32 @@ class CircuitCanvas {
         return;
       }
 
+      // Board reset button click (e.g. Arduino Uno / Nano / ESP32 on-board tactile reset button)
+      const boardResetHit = this._hitTestBoardReset(world.x, world.y);
+      if (boardResetHit) {
+        const { inst } = boardResetHit;
+        inst.runtimeState = inst.runtimeState || {};
+        if (inst.runtimeState._resetReleaseTimer) {
+          clearTimeout(inst.runtimeState._resetReleaseTimer);
+        }
+        inst.runtimeState._resetPressed = true;
+        this._selectAll(false);
+        inst.selected = true;
+        this.selected = inst;
+        this._notifySelectionChange();
+        this._render();
+
+        // Auto-release visual button press after 160ms
+        inst.runtimeState._resetReleaseTimer = setTimeout(() => {
+          inst.runtimeState._resetPressed = false;
+          inst.runtimeState._resetReleaseTimer = null;
+          this._render();
+        }, 160);
+
+        this._handleBoardResetClick(inst);
+        return;
+      }
+
       // Interactive on-canvas slider (potentiometer / sensor value)
       const sliderHit = this._hitTestSlider(world.x, world.y);
       if (sliderHit) {
@@ -3126,6 +3207,7 @@ class CircuitCanvas {
     // Hover cursor + pin tooltip
     const tagHover = this._hitTestTag(world.x, world.y);
     const pin = tagHover ? null : this._hitTestPin(world.x, world.y);
+    const boardResetHover = this._hitTestBoardReset(world.x, world.y);
     const comp = this._hitTestComp(world.x, world.y);
     const wireDetail = this._hitTestWireDetails(world.x, world.y);
     const irRemoteHover = this._hitTestIrRemoteHover(world.x, world.y);
@@ -3152,6 +3234,9 @@ class CircuitCanvas {
     } else if (pin) {
       this.canvas.style.cursor = 'crosshair';
       this._showPinTooltip(pin, e);
+    } else if (boardResetHover) {
+      this.canvas.style.cursor = 'pointer';
+      this._hidePinTooltip();
     } else if (irRemoteHover) {
       this.canvas.style.cursor = 'pointer';
       this._hidePinTooltip();
@@ -3216,6 +3301,15 @@ class CircuitCanvas {
     if (this.mode === 'sliderdrag') {
       this.mode = 'idle';
       this.sliderDrag = null;
+    }
+    // Release any held board reset button if needed
+    if (this.components) {
+      for (const c of this.components) {
+        if (c.runtimeState && c.runtimeState._resetPressed && !c.runtimeState._resetReleaseTimer) {
+          c.runtimeState._resetPressed = false;
+          this._render();
+        }
+      }
     }
     if (this.mode === 'wiredrag' && this.draggingWire) {
       const wire = this.wires.find(w => w.id === this.draggingWire.wireId);

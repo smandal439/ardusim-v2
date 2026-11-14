@@ -1785,6 +1785,35 @@ void loop() {
     }
   }
 
+  resetBoard(inst) {
+    if (!inst) return;
+    const sim = this.canvas ? this.canvas._getSimForInst(inst) : this.sim;
+    const boardNames = {
+      arduino_uno: 'Arduino Uno',
+      arduino_nano: 'Arduino Nano',
+      esp32_devkit_v1: 'ESP32',
+      stm32f746_disco: 'STM32',
+      pico2w: 'Pico 2 W',
+      lpc2148: 'LPC2148',
+      intel_8085: 'Intel 8085',
+      intel_8051: 'Intel 8051',
+      industrial_plc: 'Ardu-PLC 328'
+    };
+    const boardName = boardNames[inst.type] || inst.props?.label || 'Board';
+
+    if (this.isRunning) {
+      if (sim && typeof sim.reset === 'function') {
+        sim.reset();
+      }
+      this.showToast(`${boardName} reset`, 'info');
+      this.output?.log(`[System] ${boardName} reset button pressed`, 'system');
+    } else {
+      this.showToast(`Starting ${boardName} simulation…`, 'info');
+      this.output?.log(`[System] ${boardName} reset pressed — starting simulation`, 'system');
+      this.run();
+    }
+  }
+
   clearCanvas() {
     if (!this.canvas) return;
     const hasComponents = this.canvas.components.length > 0 || this.canvas.wires.length > 0;

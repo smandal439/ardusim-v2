@@ -2516,6 +2516,64 @@ class ArduinoSimulator {
     this._stopAllTones();
   }
 
+  reset() {
+    const wasRunning = this.isRunning;
+    this.stop();
+    this.simTime = 0;
+    this.pinStates = {};
+    this.pinModes = {};
+    this._avrState = null;
+    this._steppers = {};
+    this._tb6600s = {};
+    this._delays = [];
+    this._wireTxAddr = null;
+    this._wireRegPtr = 0x3B;
+    this._wireRxQueue = [];
+    this._neopixels = {};
+    this._lcdLines = ['', ''];
+    this._lcdCursor = { col: 0, row: 0 };
+    this._wifiConnected = false;
+    this._loopCount = 0;
+    this._iterSinceDelay = 0;
+    this._resetAdaptiveLoopState();
+    this._interrupts = {};
+    this._prevPinValues = {};
+    this._resetFreertosState();
+    this._deepsleepWakeupCause = 0;
+    this._deepsleepCount = 0;
+    this._deepsleepPending = null;
+    this._restartPending = false;
+    this._restartCount = 0;
+    this._deepsleepTimerUs = 0;
+    this._deepsleepExt0 = null;
+    this._deepsleepExt1 = null;
+    this._stopAllTones();
+
+    // Reset ESP-NOW bus for this board
+    if (window._espnowBus) {
+      for (const bid in window._espnowBus.boards) {
+        if (window._espnowBus.boards[bid].simulator === this) {
+          delete window._espnowBus.boards[bid];
+        }
+      }
+    }
+
+    if (this.onPinChange) {
+      this.onPinChange(null, null);
+    }
+    const canvas = window.CircuitCanvas;
+    if (canvas && typeof canvas.updateSimState === 'function') {
+      canvas.updateSimState(this.pinStates);
+    }
+
+    this._serialLog('\r\n[ArduSim] Board reset\r\n', 'system');
+
+    if (wasRunning && (this._compiledCtx || this._assemblyMode)) {
+      this._startExecution();
+    }
+    return true;
+  }
+
   /* -------------- MPU6050 (0x68) register read emulation --------------
      Serves Wire.requestFrom(0x68, n) starting at the register pointer set
      by a preceding Wire.write(reg). Values come from the placed mpu6050

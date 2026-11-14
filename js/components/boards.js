@@ -630,6 +630,7 @@ defComp({
     ctx.fill();
 
     // ── 6. Tactile Reset Button (Top-Left, beside USB & SCL) ──
+    const isResetPressed = !!inst.runtimeState?._resetPressed;
     // Metal bracket legs
     ctx.fillStyle = '#d0d5dd';
     ctx.fillRect(8, 18, 3, 2);
@@ -637,21 +638,32 @@ defComp({
     ctx.fillRect(8, 28, 3, 2);
     ctx.fillRect(19, 28, 3, 2);
     // Metallic switch body
-    ctx.fillStyle = '#bfc5ce';
+    ctx.fillStyle = isResetPressed ? '#a8afb8' : '#bfc5ce';
     roundRect(ctx, 9, 19, 12, 10, 2);
     ctx.fill();
-    ctx.strokeStyle = '#666';
+    ctx.strokeStyle = isResetPressed ? '#444' : '#666';
     ctx.lineWidth = 0.8;
     ctx.stroke();
     // Red Reset Actuator
-    const rstGrad = ctx.createRadialGradient(14.5, 23.5, 0.5, 15.5, 24.5, 4);
-    rstGrad.addColorStop(0, '#ff7b7b');
-    rstGrad.addColorStop(0.6, '#d63031');
-    rstGrad.addColorStop(1, '#8c1d1d');
-    ctx.fillStyle = rstGrad;
-    ctx.beginPath();
-    ctx.arc(15, 24, 3.4, 0, Math.PI * 2);
-    ctx.fill();
+    if (isResetPressed) {
+      const rstGrad = ctx.createRadialGradient(15, 24, 0.2, 15, 24, 3);
+      rstGrad.addColorStop(0, '#c0392b');
+      rstGrad.addColorStop(0.7, '#962d22');
+      rstGrad.addColorStop(1, '#641e16');
+      ctx.fillStyle = rstGrad;
+      ctx.beginPath();
+      ctx.arc(15, 24, 2.7, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      const rstGrad = ctx.createRadialGradient(14.5, 23.5, 0.5, 15.5, 24.5, 4);
+      rstGrad.addColorStop(0, '#ff7b7b');
+      rstGrad.addColorStop(0.6, '#d63031');
+      rstGrad.addColorStop(1, '#8c1d1d');
+      ctx.fillStyle = rstGrad;
+      ctx.beginPath();
+      ctx.arc(15, 24, 3.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
     // RESET silkscreen
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 4.2px sans-serif';
@@ -1490,21 +1502,22 @@ defComp({
     ctx.fillRect(14, 52, 4, 3);
 
     // --- 4. RESET BUTTON ---
-    ctx.fillStyle = '#3a3d40';
+    const isNanoResetPressed = !!inst.runtimeState?._resetPressed;
+    ctx.fillStyle = isNanoResetPressed ? '#2a2c2e' : '#3a3d40';
     roundRect(ctx, 28, 33, 12, 14, 2);
     ctx.fill();
-    ctx.strokeStyle = '#888';
+    ctx.strokeStyle = isNanoResetPressed ? '#555' : '#888';
     ctx.lineWidth = 0.6;
     ctx.stroke();
 
     // Silver Button Cap & Plunger
-    ctx.fillStyle = '#c5c9ce';
+    ctx.fillStyle = isNanoResetPressed ? '#9da3aa' : '#c5c9ce';
     ctx.beginPath();
-    ctx.arc(34, 40, 3.5, 0, Math.PI * 2);
+    ctx.arc(34, 40, isNanoResetPressed ? 2.8 : 3.5, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#111';
+    ctx.fillStyle = isNanoResetPressed ? '#000000' : '#111';
     ctx.beginPath();
-    ctx.arc(34, 40, 2, 0, Math.PI * 2);
+    ctx.arc(34, 40, isNanoResetPressed ? 1.6 : 2, 0, Math.PI * 2);
     ctx.fill();
 
     // --- 5. ATMEGA328P IC (Center TQFP-32 Package) ---
@@ -1828,11 +1841,13 @@ defComp({
     }
 
     // ── Tactile Buttons ──
+    const isEnPressed = !!inst.runtimeState?._resetPressed;
     const drawButton = (bx, label) => {
-      ctx.fillStyle = '#222';
+      const isPressed = label === 'EN' && isEnPressed;
+      ctx.fillStyle = isPressed ? '#111' : '#222';
       roundRect(ctx, bx - 6, H - 20, 12, 10, 2);
       ctx.fill();
-      ctx.fillStyle = '#555';
+      ctx.fillStyle = isPressed ? '#333' : '#555';
       roundRect(ctx, bx - 4, H - 18, 8, 6, 1);
       ctx.fill();
       ctx.fillStyle = 'rgba(255,255,255,0.4)';
