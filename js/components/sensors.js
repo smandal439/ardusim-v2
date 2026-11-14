@@ -2655,6 +2655,47 @@ defComp({
     { field: 'connected', label: 'Conn', min: 0, max: 1, step: 1, unit: '' },
     { field: 'rxData', label: 'RX Data', type: 'text' },
   ],
+  contextMenu: [
+    {
+      label: 'Open Virtual Smartphone Controller',
+      icon: '📱',
+      action: (inst) => {
+        if (window.BluetoothPhoneModal) {
+          window.BluetoothPhoneModal.open(inst);
+        } else if (window.App?.openBluetoothPhoneModal) {
+          window.App.openBluetoothPhoneModal(inst);
+        }
+      },
+    },
+    {
+      label: 'Connect / Disconnect Bluetooth',
+      icon: '📶',
+      action: (inst) => {
+        window.BluetoothPhoneModal?.toggleConnect(inst);
+      },
+    },
+    {
+      label: "Send '1' (Turn LED ON)",
+      icon: '💡',
+      action: (inst) => {
+        window.BluetoothPhoneModal?.sendData('1');
+      },
+    },
+    {
+      label: "Send '0' (Turn LED OFF)",
+      icon: '🌑',
+      action: (inst) => {
+        window.BluetoothPhoneModal?.sendData('0');
+      },
+    },
+    {
+      label: 'Component Properties...',
+      icon: '⚙️',
+      action: (inst) => {
+        window.App?.openPropsModal(inst);
+      },
+    },
+  ],
   pins: [
     { id: 'STATE', label: 'STATE', type: PIN_TYPE.DIGITAL, x: 7,  y: 85, side: 'bottom' },
     { id: 'RXD',   label: 'RXD',   type: PIN_TYPE.DIGITAL, x: 15, y: 85, side: 'bottom' },
@@ -2666,6 +2707,7 @@ defComp({
   step(inst, sim) {
     if (!sim || !sim.isRunning) return;
     const connected = inst.runtimeState?.connected ?? inst.props?.connected ?? false;
+    sim.setPinState(`${inst.id}_STATE`, connected ? 1 : 0);
     if (!connected) return;
     const rxData = inst.runtimeState?.rxData ?? inst.props?.rxData ?? '';
     if (typeof rxData === 'string' && rxData.length > 0) {

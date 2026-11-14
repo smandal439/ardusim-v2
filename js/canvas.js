@@ -3628,6 +3628,14 @@ class CircuitCanvas {
         window.App.openDSOFullscreen(comp);
         return;
       }
+      if (comp.type === 'hc05') {
+        if (window.BluetoothPhoneModal) {
+          window.BluetoothPhoneModal.open(comp);
+        } else if (window.App.openBluetoothPhoneModal) {
+          window.App.openBluetoothPhoneModal(comp);
+        }
+        return;
+      }
       window.App.openPropsModal(comp);
     }
   }
@@ -4435,6 +4443,21 @@ class CircuitCanvas {
     }
 
     el.appendChild(valSpan);
+
+    if (inst.type === 'hc05') {
+      const phoneBtn = document.createElement('button');
+      phoneBtn.className = 'btn-xs';
+      phoneBtn.style.padding = '2px 8px';
+      phoneBtn.style.fontSize = '10px';
+      phoneBtn.style.marginLeft = '4px';
+      phoneBtn.innerHTML = '📱 Phone';
+      phoneBtn.title = 'Open Virtual Smartphone Controller';
+      phoneBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.BluetoothPhoneModal?.open(inst);
+      });
+      el.appendChild(phoneBtn);
+    }
 
     const closeBtn = document.createElement('span');
     closeBtn.className = 'qc-close';

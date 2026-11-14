@@ -1177,11 +1177,13 @@ void loop() {
           this.serial?.receive(tagged, type);
           if (!suppressed) this.plotter?.addSerial(tagged);
           if (this.remote && type === 'data') this.remote.publishSerial(tagged);
+          if (type === 'data') window.BluetoothPhoneModal?.onSerialData?.(line);
         }
       } else {
         this.serial?.receive(text, type);
         if (!suppressed) this.plotter?.addSerial(text);
         if (this.remote && type === 'data') this.remote.publishSerial(text);
+        if (type === 'data') window.BluetoothPhoneModal?.onSerialData?.(text);
       }
     };
 
@@ -3970,6 +3972,19 @@ _newProject() {
 
   closeDSOFullscreen() {
     if (this._dsoFS) this._dsoFS.close();
+  }
+
+  /* ---------------------- BLUETOOTH PHONE CONTROLLER ---------------------- */
+  openBluetoothPhoneModal(comp) {
+    if (window.BluetoothPhoneModal) {
+      window.BluetoothPhoneModal.open(comp);
+    }
+  }
+
+  closeBluetoothPhoneModal() {
+    if (window.BluetoothPhoneModal) {
+      window.BluetoothPhoneModal.close();
+    }
   }
 
   /* ---------------------- LOGIC ANALYZER ---------------------- */

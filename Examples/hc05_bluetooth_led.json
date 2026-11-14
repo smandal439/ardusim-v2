@@ -2,7 +2,7 @@
   "id": "hc05_bluetooth_led",
   "name": "HC-05 Bluetooth LED Control",
   "icon": "📶",
-  "desc": "Toggle LED on/off via Bluetooth using HC-05 module and Serial communication",
+  "desc": "Toggle LED on/off via Virtual Smartphone Bluetooth Controller using HC-05 transceiver module",
   "tags": [
     "bluetooth",
     "hc05",
@@ -12,7 +12,7 @@
     "arduino",
     "intermediate"
   ],
-  "code": "int ledPin = 13;\nbool ledState = false;\n\nvoid setup() {\n  pinMode(ledPin, OUTPUT);\n  Serial.begin(115200);\n  digitalWrite(ledPin, LOW);\n}\n\nvoid loop() {\n  if (Serial.available() > 0) {\n    char c = Serial.read();\n    if (c == '1') {\n      ledState = true;\n      digitalWrite(ledPin, HIGH);\n      Serial.println(\"LED ON\");\n    } else if (c == '0') {\n      ledState = false;\n      digitalWrite(ledPin, LOW);\n      Serial.println(\"LED OFF\");\n    }\n  }\n  delay(50);\n}",
+  "code": "/*\n * HC-05 Bluetooth LED Control\n *\n * HOW TO CONTROL VIA BLUETOOTH:\n * 1. Click \"Run\" in the toolbar to start the simulation.\n * 2. Double-click the HC-05 module on the canvas\n *    (or right-click -> \"Open Virtual Smartphone Controller\").\n * 3. On the phone screen, tap \"Connect\" (the HC-05 LED turns solid blue).\n * 4. Tap \"LED ON\" ('1') or \"LED OFF\" ('0') to toggle the LED!\n * 5. Responses (\"LED ON\", \"LED OFF\") appear in the phone's Terminal tab.\n */\n\nint ledPin = 13;\nbool ledState = false;\n\nvoid setup() {\n  pinMode(ledPin, OUTPUT);\n  Serial.begin(115200);\n  digitalWrite(ledPin, LOW);\n}\n\nvoid loop() {\n  if (Serial.available() > 0) {\n    char c = Serial.read();\n    if (c == '1') {\n      ledState = true;\n      digitalWrite(ledPin, HIGH);\n      Serial.println(\"LED ON\");\n    } else if (c == '0') {\n      ledState = false;\n      digitalWrite(ledPin, LOW);\n      Serial.println(\"LED OFF\");\n    }\n  }\n  delay(50);\n}",
   "circuit": {
     "components": [
       {
