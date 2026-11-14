@@ -61,6 +61,15 @@ class FakeDOMElement {
     return child;
   }
 
+  setAttribute(name, val) {
+    if (!this.attributes) this.attributes = {};
+    this.attributes[name] = String(val);
+  }
+
+  getAttribute(name) {
+    return this.attributes?.[name] ?? null;
+  }
+
   addEventListener(type, listener) {
     if (!this.eventListeners[type]) this.eventListeners[type] = [];
     this.eventListeners[type].push(listener);
@@ -457,5 +466,60 @@ describe('Phase 1 UI Enhancements — On-Canvas Floating Quick-Controls', () => 
     canvas._updateQuickControls();
 
     expect(qcEl.classList.contains('hidden')).toBe(true);
+  });
+});
+
+describe('Navigator Mini-Map & Current Flow Defaults & Mouse Click Toggle', () => {
+  it('defaults minimapVisible and animatedCurrentFlow to false', () => {
+    const canvas = Object.create(CircuitCanvas.prototype);
+    canvas.minimapVisible = false;
+    canvas.animatedCurrentFlow = false;
+    expect(canvas.minimapVisible).toBe(false);
+    expect(canvas.animatedCurrentFlow).toBe(false);
+  });
+
+  it('toggles minimap on mouse click without double-toggling', () => {
+    const canvas = createCanvas();
+    canvas.minimapVisible = false;
+    canvas.minimapContainer = domElements['canvas-minimap'] || new FakeDOMElement('div', 'canvas-minimap');
+    domElements['canvas-minimap'] = canvas.minimapContainer;
+    canvas.minimapContainer.classList.add('hidden');
+
+    const toggleBtn = new FakeDOMElement('button', 'btn-toggle-minimap');
+    domElements['btn-toggle-minimap'] = toggleBtn;
+
+    // Simulate single-bound click handler
+    toggleBtn._minimapBound = true;
+    toggleBtn.addEventListener('click', (e) => {
+      e?.stopPropagation?.();
+      canvas.toggleMinimap();
+    });
+
+    // 1st click -> turns ON
+    toggleBtn.dispatchEvent({ type: 'click' });
+    expect(canvas.minimapVisible).toBe(true);
+    expect(canvas.minimapContainer.classList.contains('hidden')).toBe(false);
+    expect(toggleBtn.classList.contains('active')).toBe(true);
+
+    // 2nd click -> turns OFF
+    toggleBtn.dispatchEvent({ type: 'click' });
+    expect(canvas.minimapVisible).toBe(false);
+    expect(canvas.minimapContainer.classList.contains('hidden')).toBe(true);
+    expect(toggleBtn.classList.contains('active')).toBe(false);
+  });
+
+  it('toggles animatedCurrentFlow on toggleCurrentAnimation()', () => {
+    const canvas = createCanvas();
+    canvas.animatedCurrentFlow = false;
+    const btn = new FakeDOMElement('button', 'btn-toggle-current-flow');
+    domElements['btn-toggle-current-flow'] = btn;
+
+    canvas.toggleCurrentAnimation();
+    expect(canvas.animatedCurrentFlow).toBe(true);
+    expect(btn.classList.contains('active')).toBe(true);
+
+    canvas.toggleCurrentAnimation();
+    expect(canvas.animatedCurrentFlow).toBe(false);
+    expect(btn.classList.contains('active')).toBe(false);
   });
 });

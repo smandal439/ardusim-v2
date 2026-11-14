@@ -17,6 +17,8 @@
       this.targetInst = null;
       this.connected = false;
       this.ledState = false;
+      this.onPayload = '1';
+      this.offPayload = '0';
       this.activeTab = 'buttons'; // 'buttons' | 'terminal' | 'info'
       this.isOpen = false;
       this.isMinimized = false;
@@ -125,6 +127,33 @@
                 <span class="bt-led-state-text" id="bt-led-state-text">LED is OFF</span>
               </div>
               <div class="bt-virtual-bulb" id="bt-virtual-bulb" title="Pin 13 LED State"></div>
+            </div>
+
+            <!-- Payload Configuration Header -->
+            <div class="bt-cfg-header">
+              <span class="bt-section-label">Action Buttons</span>
+              <button type="button" class="bt-btn-cfg-toggle" id="bt-btn-cfg-toggle" title="Customize button payload (e.g. 1/0, H/L, ON/OFF)">
+                <span>⚙️ Customize Payloads</span>
+              </button>
+            </div>
+
+            <!-- Expandable Payload Config Drawer -->
+            <div class="bt-config-panel hidden" id="bt-config-panel">
+              <div class="bt-config-row">
+                <label for="bt-cfg-on-val">ON Payload:</label>
+                <input type="text" class="bt-config-input" id="bt-cfg-on-val" value="1" maxlength="32" placeholder="e.g. 1, H, ON">
+              </div>
+              <div class="bt-config-row">
+                <label for="bt-cfg-off-val">OFF Payload:</label>
+                <input type="text" class="bt-config-input" id="bt-cfg-off-val" value="0" maxlength="32" placeholder="e.g. 0, L, OFF">
+              </div>
+              <div class="bt-config-presets">
+                <span style="font-size:9px;color:#94a3b8;margin-right:2px;">Presets:</span>
+                <button type="button" class="bt-preset-pill" data-on="1" data-off="0">1 / 0</button>
+                <button type="button" class="bt-preset-pill" data-on="H" data-off="L">H / L</button>
+                <button type="button" class="bt-preset-pill" data-on="ON" data-off="OFF">ON / OFF</button>
+                <button type="button" class="bt-preset-pill" data-on="A" data-off="a">A / a</button>
+              </div>
             </div>
 
             <!-- Big Primary Action Buttons -->
@@ -245,17 +274,43 @@
         });
       });
 
+      // Payload Configuration Drawer Toggle
+      const cfgToggle = this.wrapperEl.querySelector('#bt-btn-cfg-toggle');
+      const cfgPanel = this.wrapperEl.querySelector('#bt-config-panel');
+      cfgToggle?.addEventListener('click', () => {
+        cfgPanel?.classList.toggle('hidden');
+      });
+
+      // Payload Configuration Inputs
+      const cfgOnInput = this.wrapperEl.querySelector('#bt-cfg-on-val');
+      const cfgOffInput = this.wrapperEl.querySelector('#bt-cfg-off-val');
+      cfgOnInput?.addEventListener('input', (e) => {
+        this.setPayloads(e.target.value, this.offPayload);
+      });
+      cfgOffInput?.addEventListener('input', (e) => {
+        this.setPayloads(this.onPayload, e.target.value);
+      });
+
+      // Payload Preset Pills
+      this.wrapperEl.querySelectorAll('.bt-preset-pill').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const onVal = e.currentTarget.getAttribute('data-on') || '1';
+          const offVal = e.currentTarget.getAttribute('data-off') || '0';
+          this.setPayloads(onVal, offVal);
+        });
+      });
+
       // Quick LED Action Buttons
       this.wrapperEl.querySelector('#bt-btn-led-on')?.addEventListener('click', () => {
-        this.sendData('1');
+        this.sendData(this.onPayload);
       });
 
       this.wrapperEl.querySelector('#bt-btn-led-off')?.addEventListener('click', () => {
-        this.sendData('0');
+        this.sendData(this.offPayload);
       });
 
       this.wrapperEl.querySelector('#bt-btn-led-toggle')?.addEventListener('click', () => {
-        const next = this.ledState ? '0' : '1';
+        const next = this.ledState ? this.offPayload : this.onPayload;
         this.sendData(next);
       });
 
@@ -378,13 +433,16 @@
       this.isOpen = true;
       this.isMinimized = false;
 
-      // Sync state from component
+      // Sync state and payloads from component
       if (this.targetInst) {
         const isConn = !!(this.targetInst.runtimeState?.connected ?? this.targetInst.props?.connected ?? false);
         this.connected = isConn;
+        this.onPayload = String(this.targetInst.props?.onPayload ?? this.onPayload ?? '1');
+        this.offPayload = String(this.targetInst.props?.offPayload ?? this.offPayload ?? '0');
       }
 
       this._updateUIState();
+      this._updateButtonSubLabels();
       this.pillEl?.classList.add('hidden');
       this.wrapperEl?.classList.remove('hidden');
 
@@ -511,12 +569,43 @@
       const displayPayload = String(data).replace(/\r/g, '\\r').replace(/\n/g, '\\n');
       this._appendLog('tx', displayPayload);
 
-      // Optimistically update LED bulb state if sending 1 or 0
-      if (String(data).trim() === '1') {
+      // Optimistically update LED bulb state if sending matching ON or OFF payload
+      const trimmed = String(data).trim();
+      if (trimmed === this.onPayload || (this.onPayload === '1' && trimmed === '1')) {
         this._updateLEDIndicator(true);
-      } else if (String(data).trim() === '0') {
+      } else if (trimmed === this.offPayload || (this.offPayload === '0' && trimmed === '0')) {
         this._updateLEDIndicator(false);
       }
+    }
+
+    setPayloads(onVal, offVal) {
+      if (onVal !== undefined && onVal !== null) this.onPayload = String(onVal);
+      if (offVal !== undefined && offVal !== null) this.offPayload = String(offVal);
+
+      if (this.targetInst) {
+        this.targetInst.props = this.targetInst.props || {};
+        this.targetInst.props.onPayload = this.onPayload;
+        this.targetInst.props.offPayload = this.offPayload;
+      }
+
+      this._updateButtonSubLabels();
+    }
+
+    _updateButtonSubLabels() {
+      const onSub = this.wrapperEl?.querySelector('#bt-btn-led-on .bt-btn-sub');
+      const offSub = this.wrapperEl?.querySelector('#bt-btn-led-off .bt-btn-sub');
+      const onBtn = this.wrapperEl?.querySelector('#bt-btn-led-on');
+      const offBtn = this.wrapperEl?.querySelector('#bt-btn-led-off');
+
+      if (onSub) onSub.textContent = `SEND '${this.onPayload}'`;
+      if (offSub) offSub.textContent = `SEND '${this.offPayload}'`;
+      if (onBtn) onBtn.title = `Transmit '${this.onPayload}' via Bluetooth`;
+      if (offBtn) offBtn.title = `Transmit '${this.offPayload}' via Bluetooth`;
+
+      const onIn = this.wrapperEl?.querySelector('#bt-cfg-on-val');
+      const offIn = this.wrapperEl?.querySelector('#bt-cfg-off-val');
+      if (onIn && onIn.value !== this.onPayload) onIn.value = this.onPayload;
+      if (offIn && offIn.value !== this.offPayload) offIn.value = this.offPayload;
     }
 
     onSerialData(text) {
@@ -529,10 +618,10 @@
       // Append to phone terminal
       this._appendLog('rx', trimmed);
 
-      // Detect feedback from Arduino sketch (e.g. "LED ON" / "LED OFF")
-      if (trimmed.includes('LED ON')) {
+      // Detect feedback from Arduino sketch (e.g. "LED ON" / "LED OFF" or matching payloads)
+      if (trimmed.includes('LED ON') || trimmed === this.onPayload) {
         this._updateLEDIndicator(true);
-      } else if (trimmed.includes('LED OFF')) {
+      } else if (trimmed.includes('LED OFF') || trimmed === this.offPayload) {
         this._updateLEDIndicator(false);
       }
     }

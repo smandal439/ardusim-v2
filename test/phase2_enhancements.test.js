@@ -218,10 +218,6 @@ describe('Phase 2 Hardware Ergonomics & Diagnostic Exporters', () => {
       const CircuitCanvas = fn();
 
       const canvas = new CircuitCanvas(dom['circuit-canvas'], dom['canvas-wrapper']);
-      expect(canvas.minimapVisible).toBe(true);
-
-      // Toggle off
-      canvas.toggleMinimap(false);
       expect(canvas.minimapVisible).toBe(false);
       expect(dom['canvas-minimap'].classList.contains('hidden')).toBe(true);
       expect(dom['btn-toggle-minimap'].classList.contains('active')).toBe(false);
@@ -231,6 +227,12 @@ describe('Phase 2 Hardware Ergonomics & Diagnostic Exporters', () => {
       expect(canvas.minimapVisible).toBe(true);
       expect(dom['canvas-minimap'].classList.contains('hidden')).toBe(false);
       expect(dom['btn-toggle-minimap'].classList.contains('active')).toBe(true);
+
+      // Toggle off
+      canvas.toggleMinimap(false);
+      expect(canvas.minimapVisible).toBe(false);
+      expect(dom['canvas-minimap'].classList.contains('hidden')).toBe(true);
+      expect(dom['btn-toggle-minimap'].classList.contains('active')).toBe(false);
     });
 
     it('calculates world bounds and renders thumbnail with viewport rect', () => {
@@ -238,6 +240,7 @@ describe('Phase 2 Hardware Ergonomics & Diagnostic Exporters', () => {
       const CircuitCanvas = fn();
 
       const canvas = new CircuitCanvas(dom['circuit-canvas'], dom['canvas-wrapper']);
+      canvas.toggleMinimap(true);
       canvas.components = [
         { id: 'uno1', type: 'arduino_uno', x: 100, y: 150, props: {}, rotation: 0 },
         { id: 'led1', type: 'led', x: 350, y: 150, props: {}, rotation: 0 },

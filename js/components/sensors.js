@@ -2650,9 +2650,11 @@ defComp({
   desc: 'HC-05 serial-to-Bluetooth transceiver module (ZS-040 breakout). For mobile app communication',
   width: 54,
   height: 85,
-  defaultProps: { connected: false, rxData: '' },
+  defaultProps: { connected: false, rxData: '', onPayload: '1', offPayload: '0' },
   interactive: [
     { field: 'connected', label: 'Conn', min: 0, max: 1, step: 1, unit: '' },
+    { field: 'onPayload', label: 'ON Msg', type: 'text' },
+    { field: 'offPayload', label: 'OFF Msg', type: 'text' },
     { field: 'rxData', label: 'RX Data', type: 'text' },
   ],
   contextMenu: [

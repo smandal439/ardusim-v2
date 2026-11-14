@@ -192,7 +192,7 @@ class CircuitCanvas {
     this._tipKey = null;
 
     /* Mini-Map & Pin Cross-Probing (Phase 2) */
-    this.minimapVisible = true;
+    this.minimapVisible = false;
     this.minimapCanvas = null;
     this.minimapContainer = null;
     this.minimapDragging = false;
@@ -200,7 +200,7 @@ class CircuitCanvas {
     this.highlightedPin = null;
 
     /* Animated Current / Signal Flow (Phase 3) */
-    this.animatedCurrentFlow = true;
+    this.animatedCurrentFlow = false;
 
     this._initMinimap();
   }
@@ -4753,6 +4753,20 @@ class CircuitCanvas {
     this.minimapContainer = document.getElementById('canvas-minimap');
     this.minimapCanvas = document.getElementById('minimap-canvas');
 
+    if (this.minimapContainer) {
+      this.minimapContainer.classList.toggle('hidden', !this.minimapVisible);
+    }
+    const toggleBtn = document.getElementById('btn-toggle-minimap');
+    if (toggleBtn) {
+      toggleBtn.classList.toggle('active', this.minimapVisible);
+      toggleBtn.setAttribute('aria-pressed', this.minimapVisible ? 'true' : 'false');
+    }
+    const flowBtn = document.getElementById('btn-toggle-current-flow');
+    if (flowBtn) {
+      flowBtn.classList.toggle('active', this.animatedCurrentFlow);
+      flowBtn.setAttribute('aria-pressed', this.animatedCurrentFlow ? 'true' : 'false');
+    }
+
     const closeBtn = document.getElementById('btn-close-minimap');
     if (closeBtn) {
       closeBtn.addEventListener('click', (e) => {
@@ -4761,8 +4775,8 @@ class CircuitCanvas {
       });
     }
 
-    const toggleBtn = document.getElementById('btn-toggle-minimap');
-    if (toggleBtn) {
+    if (toggleBtn && !toggleBtn._minimapBound) {
+      toggleBtn._minimapBound = true;
       toggleBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         this.toggleMinimap();

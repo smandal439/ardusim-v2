@@ -50,6 +50,15 @@ class FakeDOMElement {
   }
 
   querySelector(sel) {
+    if (sel.includes(' ')) {
+      const parts = sel.split(/\s+/);
+      let curr = this;
+      for (const part of parts) {
+        curr = curr.querySelector ? curr.querySelector(part) : null;
+        if (!curr) return null;
+      }
+      return curr;
+    }
     if (sel.startsWith('#')) {
       const targetId = sel.slice(1);
       if (this.id === targetId) return this;
@@ -234,5 +243,39 @@ describe('Virtual Smartphone Bluetooth Controller', () => {
     // Arduino sends "LED OFF\r\n"
     controller.onSerialData('LED OFF\r\n');
     expect(controller.ledState).toBe(false);
+  });
+
+  it('supports customizable ON/OFF payloads and persists them to component props', () => {
+    controller.open(mockComp);
+    expect(controller.onPayload).toBe('1');
+    expect(controller.offPayload).toBe('0');
+
+    // Customize payloads to 'H' and 'L'
+    controller.setPayloads('H', 'L');
+    expect(controller.onPayload).toBe('H');
+    expect(controller.offPayload).toBe('L');
+    expect(mockComp.props.onPayload).toBe('H');
+    expect(mockComp.props.offPayload).toBe('L');
+
+    // Sending onPayload transmits 'H'
+    controller.sendData(controller.onPayload);
+    expect(mockSim.serialInputBuffer).toContain('H');
+    expect(controller.ledState).toBe(true);
+
+    // Sending offPayload transmits 'L'
+    controller.sendData(controller.offPayload);
+    expect(mockSim.serialInputBuffer).toContain('L');
+    expect(controller.ledState).toBe(false);
+
+    // Reopening syncs stored custom payloads from component props
+    const otherComp = {
+      id: 'bt2',
+      type: 'hc05',
+      props: { connected: true, onPayload: 'ON', offPayload: 'OFF' },
+      runtimeState: { connected: true },
+    };
+    controller.open(otherComp);
+    expect(controller.onPayload).toBe('ON');
+    expect(controller.offPayload).toBe('OFF');
   });
 });

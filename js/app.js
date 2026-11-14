@@ -292,7 +292,10 @@ class App {
     fitViewBtn?.addEventListener('click', () => this.canvas?.fitView());
     canvasFullscreenBtn?.addEventListener('click', () => this._toggleCanvasFullscreen());
     const toggleMinimapBtn = get('btn-toggle-minimap');
-    toggleMinimapBtn?.addEventListener('click', () => this.canvas?.toggleMinimap());
+    if (toggleMinimapBtn && !toggleMinimapBtn._minimapBound) {
+      toggleMinimapBtn._minimapBound = true;
+      toggleMinimapBtn.addEventListener('click', () => this.canvas?.toggleMinimap());
+    }
     const toggleCurrentFlowBtn = get('btn-toggle-current-flow');
     toggleCurrentFlowBtn?.addEventListener('click', () => this.canvas?.toggleCurrentAnimation());
     const editorFullscreenBtn = get('btn-editor-fullscreen');

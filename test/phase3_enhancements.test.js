@@ -250,10 +250,6 @@ describe('Phase 3 Current Flow, Detachable Instruments & Protocol Decoders', () 
       const CircuitCanvas = fn();
       const canvas = new CircuitCanvas(dom['circuit-canvas'], dom['canvas-wrapper']);
 
-      expect(canvas.animatedCurrentFlow).toBe(true);
-
-      // Toggle off
-      canvas.toggleCurrentAnimation(false);
       expect(canvas.animatedCurrentFlow).toBe(false);
       expect(dom['btn-toggle-current-flow'].classList.contains('active')).toBe(false);
 
@@ -261,12 +257,18 @@ describe('Phase 3 Current Flow, Detachable Instruments & Protocol Decoders', () 
       canvas.toggleCurrentAnimation();
       expect(canvas.animatedCurrentFlow).toBe(true);
       expect(dom['btn-toggle-current-flow'].classList.contains('active')).toBe(true);
+
+      // Toggle off
+      canvas.toggleCurrentAnimation(false);
+      expect(canvas.animatedCurrentFlow).toBe(false);
+      expect(dom['btn-toggle-current-flow'].classList.contains('active')).toBe(false);
     });
 
     it('identifies conducting wires with active logic level or power rail', () => {
       const fn = new Function(canvasCode + '\nreturn CircuitCanvas;');
       const CircuitCanvas = fn();
       const canvas = new CircuitCanvas(dom['circuit-canvas'], dom['canvas-wrapper']);
+      canvas.animatedCurrentFlow = true;
 
       const uno = { id: 'uno1', type: 'arduino_uno', x: 0, y: 0, props: {}, rotation: 0 };
       const led = { id: 'led1', type: 'led', x: 200, y: 0, props: {}, rotation: 0 };
