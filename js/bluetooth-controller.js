@@ -552,18 +552,8 @@
         this.toggleConnect(target);
       }
 
-      // Transmit to simulation UART buffer (feeds hardware Serial.read())
+      // Transmit to simulation UART buffer (feeds hardware Serial.read() and active SoftwareSerial)
       sim.sendSerialInput(text);
-
-      // Support SoftwareSerial if listening
-      if (sim._softSerial) {
-        for (const ssId in sim._softSerial) {
-          const ch = sim._softSerial[ssId];
-          if (ch && ch.listening && Array.isArray(ch.buf)) {
-            for (const c of text) ch.buf.push(c);
-          }
-        }
-      }
 
       // Update UI log
       const displayPayload = String(data).replace(/\r/g, '\\r').replace(/\n/g, '\\n');

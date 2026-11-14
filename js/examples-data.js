@@ -15279,7 +15279,7 @@ window.EXAMPLE_SKETCHES = [
     "id": "hc05_bluetooth_led",
     "name": "HC-05 Bluetooth LED Control",
     "icon": "📶",
-    "desc": "Toggle LED on/off via Bluetooth using HC-05 module and Serial communication",
+    "desc": "Toggle LED on/off via Virtual Smartphone Bluetooth Controller using HC-05 transceiver module",
     "tags": [
       "bluetooth",
       "hc05",
@@ -15289,7 +15289,7 @@ window.EXAMPLE_SKETCHES = [
       "arduino",
       "intermediate"
     ],
-    "code": "int ledPin = 13;\nbool ledState = false;\n\nvoid setup() {\n  pinMode(ledPin, OUTPUT);\n  Serial.begin(115200);\n  digitalWrite(ledPin, LOW);\n}\n\nvoid loop() {\n  if (Serial.available() > 0) {\n    char c = Serial.read();\n    if (c == '1') {\n      ledState = true;\n      digitalWrite(ledPin, HIGH);\n      Serial.println(\"LED ON\");\n    } else if (c == '0') {\n      ledState = false;\n      digitalWrite(ledPin, LOW);\n      Serial.println(\"LED OFF\");\n    }\n  }\n  delay(50);\n}",
+    "code": "/*\n * HC-05 Bluetooth LED Control\n *\n * HOW TO CONTROL VIA BLUETOOTH:\n * 1. Click \"Run\" in the toolbar to start the simulation.\n * 2. Double-click the HC-05 module on the canvas\n *    (or right-click -> \"Open Virtual Smartphone Controller\").\n * 3. On the phone screen, tap \"Connect\" (the HC-05 LED turns solid blue).\n * 4. Tap \"LED ON\" ('1') or \"LED OFF\" ('0') to toggle the LED!\n * 5. Responses (\"LED ON\", \"LED OFF\") appear in the phone's Terminal tab.\n */\n\nint ledPin = 13;\nbool ledState = false;\n\nvoid setup() {\n  pinMode(ledPin, OUTPUT);\n  Serial.begin(115200);\n  digitalWrite(ledPin, LOW);\n}\n\nvoid loop() {\n  if (Serial.available() > 0) {\n    char c = Serial.read();\n    if (c == '1') {\n      ledState = true;\n      digitalWrite(ledPin, HIGH);\n      Serial.println(\"LED ON\");\n    } else if (c == '0') {\n      ledState = false;\n      digitalWrite(ledPin, LOW);\n      Serial.println(\"LED OFF\");\n    }\n  }\n  delay(50);\n}",
     "circuit": {
       "components": [
         {
@@ -15477,6 +15477,239 @@ window.EXAMPLE_SKETCHES = [
           "waypoints": []
         }
       ]
+    }
+  },
+  {
+    "id": "hc_05_bluetooth_led_control2",
+    "name": "HC-05 Bluetooth LED Control2",
+    "icon": "🔧",
+    "desc": "A custom HC-05 Bluetooth LED Control2 circuit example.",
+    "tags": [
+      "bluetooth",
+      "hc05"
+    ],
+    "circuit": {
+      "components": [
+        {
+          "id": "b1",
+          "type": "arduino_uno",
+          "x": 100,
+          "y": 120,
+          "rotation": 0,
+          "props": {
+            "label": "UNO"
+          }
+        },
+        {
+          "id": "bt1",
+          "type": "hc05",
+          "x": 420,
+          "y": 120,
+          "rotation": 0,
+          "props": {
+            "connected": true,
+            "rxData": "",
+            "onPayload": "ON",
+            "offPayload": "OFF"
+          }
+        },
+        {
+          "id": "led1",
+          "type": "led",
+          "x": 420,
+          "y": 260,
+          "rotation": 0,
+          "props": {
+            "color": "#ff3333",
+            "colorName": "Red"
+          }
+        },
+        {
+          "id": "r1",
+          "type": "resistor",
+          "x": 425,
+          "y": 330,
+          "rotation": 0,
+          "props": {
+            "value": 220,
+            "unit": "Ω"
+          }
+        },
+        {
+          "id": "vcc1",
+          "type": "power_5v",
+          "x": 530,
+          "y": 120,
+          "rotation": 0,
+          "props": {}
+        },
+        {
+          "id": "gnd1",
+          "type": "power_gnd",
+          "x": 530,
+          "y": 380,
+          "rotation": 0,
+          "props": {}
+        }
+      ],
+      "wires": [
+        {
+          "id": "w1",
+          "from": {
+            "instId": "bt1",
+            "pinId": "TXD"
+          },
+          "to": {
+            "instId": "b1",
+            "pinId": "D0"
+          },
+          "color": null,
+          "waypoints": [
+            {
+              "x": 443,
+              "y": 108
+            },
+            {
+              "x": 346,
+              "y": 108
+            }
+          ],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "w2",
+          "from": {
+            "instId": "bt1",
+            "pinId": "RXD"
+          },
+          "to": {
+            "instId": "b1",
+            "pinId": "D1"
+          },
+          "color": null,
+          "waypoints": [
+            {
+              "x": 435,
+              "y": 108
+            },
+            {
+              "x": 334,
+              "y": 108
+            }
+          ],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "w3",
+          "from": {
+            "instId": "vcc1",
+            "pinId": "vcc"
+          },
+          "to": {
+            "instId": "bt1",
+            "pinId": "VCC"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "w4",
+          "from": {
+            "instId": "gnd1",
+            "pinId": "gnd"
+          },
+          "to": {
+            "instId": "bt1",
+            "pinId": "GND"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "w5",
+          "from": {
+            "instId": "gnd1",
+            "pinId": "gnd"
+          },
+          "to": {
+            "instId": "b1",
+            "pinId": "GND2"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "w6",
+          "from": {
+            "instId": "b1",
+            "pinId": "D13"
+          },
+          "to": {
+            "instId": "led1",
+            "pinId": "anode"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "w7",
+          "from": {
+            "instId": "led1",
+            "pinId": "cathode"
+          },
+          "to": {
+            "instId": "r1",
+            "pinId": "p1"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        },
+        {
+          "id": "w8",
+          "from": {
+            "instId": "r1",
+            "pinId": "p2"
+          },
+          "to": {
+            "instId": "gnd1",
+            "pinId": "gnd"
+          },
+          "color": null,
+          "waypoints": [],
+          "routeStyle": "orthogonal",
+          "bezierCtrl": null
+        }
+      ],
+      "annotations": [],
+      "plcProgram": {
+        "mode": "code",
+        "rungs": [
+          {
+            "output": "Q0_0",
+            "elements": [
+              {
+                "type": "NO",
+                "input": "I0_0"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "files": {
+      "sketch.ino": "const int ledPin = 13;\nbool ledState = false;\n\nvoid setup() {\n  pinMode(ledPin, OUTPUT);\n  digitalWrite(ledPin, LOW);\n\n  Serial.begin(115200);\n  // Serial.setTimeout(50); // Avoid 1-second freezes if '\\n' is missing\n  Serial.println(\"Ready. Send ON or OFF:\");\n}\n\nvoid loop() {\n  if (Serial.available() > 0) {\n    String data = Serial.readStringUntil('\\n');\n    data.trim(); // Removes any trailing '\\r' or extra spaces\n\n    if (data == \"ON\") {\n      ledState = true;\n      digitalWrite(ledPin, HIGH);\n      Serial.println(\"LED ON\");\n    } \n    else if (data == \"OFF\") {\n      ledState = false;\n      digitalWrite(ledPin, LOW);\n      Serial.println(\"LED OFF\");\n    }\n  }\n}\n"
     }
   },
   {

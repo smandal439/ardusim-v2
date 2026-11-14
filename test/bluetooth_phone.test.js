@@ -133,9 +133,22 @@ describe('Virtual Smartphone Bluetooth Controller', () => {
       isRunning: true,
       serialInputBuffer: [],
       pinStates: {},
+      _softSerial: {
+        _ss_10_11: { listening: true, buf: [] },
+      },
       sendSerialInput(text) {
         for (const ch of text) {
           this.serialInputBuffer.push(ch);
+        }
+        if (this._softSerial) {
+          for (const ssId in this._softSerial) {
+            const ch = this._softSerial[ssId];
+            if (ch && ch.listening !== false && Array.isArray(ch.buf)) {
+              for (const c of text) {
+                ch.buf.push(c);
+              }
+            }
+          }
         }
       },
       setPinState(pinKey, val) {
@@ -277,5 +290,16 @@ describe('Virtual Smartphone Bluetooth Controller', () => {
     controller.open(otherComp);
     expect(controller.onPayload).toBe('ON');
     expect(controller.offPayload).toBe('OFF');
+  });
+
+  it('does not duplicate data when sending to SoftwareSerial', () => {
+    controller.open(mockComp);
+    mockSim._softSerial._ss_10_11.buf = [];
+    controller.sendData('ON');
+    expect(mockSim._softSerial._ss_10_11.buf.join('')).toBe('ON');
+
+    mockSim._softSerial._ss_10_11.buf = [];
+    controller.sendData('OFF');
+    expect(mockSim._softSerial._ss_10_11.buf.join('')).toBe('OFF');
   });
 });
