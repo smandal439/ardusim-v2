@@ -1449,8 +1449,8 @@ DL2:    DJNZ R3, DL2
     const resizer = document.getElementById('file-explorer-resizer');
 
     const setCollapsed = (collapsed) => {
-      fileExplorer.classList.toggle('collapsed', collapsed);
-      document.body.classList.toggle('file-explorer-collapsed', collapsed);
+      if (fileExplorer) fileExplorer.classList.toggle('collapsed', collapsed);
+      if (document.body) document.body.classList.toggle('file-explorer-collapsed', collapsed);
       if (resizer) resizer.style.display = collapsed ? 'none' : '';
       if (toggleBtn) {
         toggleBtn.title = collapsed ? 'Expand File Explorer' : 'Collapse File Explorer';
@@ -1461,12 +1461,23 @@ DL2:    DJNZ R3, DL2
       if (this.editor) setTimeout(() => this.editor.layout(), 250);
     };
 
+    this.toggleFileExplorer = (collapsed) => {
+      if (typeof collapsed === 'boolean') {
+        setCollapsed(collapsed);
+      } else {
+        setCollapsed(!fileExplorer?.classList.contains('collapsed'));
+      }
+    };
+
     if (toggleBtn && fileExplorer) {
       toggleBtn.addEventListener('click', () => setCollapsed(!fileExplorer.classList.contains('collapsed')));
     }
     if (expandBtn && fileExplorer) {
       expandBtn.addEventListener('click', () => setCollapsed(false));
     }
+
+    // Hide / collapse file explorer by default
+    setCollapsed(true);
 
     // File explorer resize handle
     if (resizer && fileExplorer) {

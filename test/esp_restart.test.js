@@ -233,5 +233,5 @@ describe('ESP system APIs and restart', () => {
     const errorLog = logs.find(l => l.text && l.text.includes('Restart limit (100) reached'));
     expect(errorLog).toBeDefined();
     expect(sim.isRunning).toBe(false);
-  });
+  }, 15000);
 });

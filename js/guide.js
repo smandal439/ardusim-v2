@@ -4507,16 +4507,27 @@ class GuideManager {
       const def = defs[id];
       const g = GUIDE_COMPONENTS[id];
       const short = (g && g.longDesc ? g.longDesc.split('.')[0] + '.' : def.desc);
+      const svgPreview = window.ComponentSvg
+        ? window.ComponentSvg.getSvg(id, def)
+        : `<span class="gc-card-fallback-icon">${this._esc(def.icon || '📋')}</span>`;
+      const badge = window.ComponentSvg ? window.ComponentSvg.getBadge(id, def) : null;
+      const badgeHtml = badge ? `<span class="comp-badge">${this._esc(badge)}</span>` : '';
+
       return `
-        <button class="gc-card" data-comp="${this._esc(id)}">
-          <div class="gc-card-head">
-            <span class="gc-card-icon">${def.icon || '📋'}</span>
-            <div>
-              <strong>${this._esc(def.name)}</strong>
+        <button class="gc-card" data-comp="${this._esc(id)}" aria-label="${this._esc(def.name)}">
+          <div class="gc-card-preview-wrap">
+            <div class="gc-card-preview">
+              ${svgPreview}
+            </div>
+            ${badgeHtml}
+          </div>
+          <div class="gc-card-info">
+            <div class="gc-card-head">
+              <strong title="${this._esc(def.name)}">${this._esc(def.name)}</strong>
               <span class="gc-card-cat">${this._esc(def.category)}</span>
             </div>
+            <p class="gc-card-desc">${this._esc(short)}</p>
           </div>
-          <p class="gc-card-desc">${this._esc(short)}</p>
         </button>`;
     }).join('') : `<div class="library-empty">No components match your search.</div>`;
 
@@ -4532,6 +4543,12 @@ class GuideManager {
     const def = (window.ArduinoComponents && window.ArduinoComponents.COMPONENT_DEFS[id]);
     if (!def) return;
     const g = GUIDE_COMPONENTS[id] || {};
+
+    const svgPreview = window.ComponentSvg
+      ? window.ComponentSvg.getSvg(id, def)
+      : `<span class="gc-card-fallback-icon">${this._esc(def.icon || '📋')}</span>`;
+    const badge = window.ComponentSvg ? window.ComponentSvg.getBadge(id, def) : null;
+    const badgeHtml = badge ? `<span class="comp-badge">${this._esc(badge)}</span>` : '';
 
     // Pin table (merge runtime pins with documented descriptions)
     const grouped = g.grouped || (!def.pins || def.pins.length === 0);
@@ -4588,10 +4605,16 @@ class GuideManager {
       <button class="gh-btn gh-btn-ghost gh-btn-sm gc-back">← Back to all components</button>
       <div class="gc-detail">
         <div class="gc-detail-head">
-          <span class="gc-card-icon gc-card-icon-lg">${def.icon || '📋'}</span>
-          <div>
+          <div class="gc-detail-preview">
+            ${svgPreview}
+            ${badgeHtml}
+          </div>
+          <div class="gc-detail-title-wrap">
             <h2>${this._esc(def.name)}</h2>
-            <span class="gc-card-cat">${this._esc(def.category)}</span>
+            <div class="gc-detail-meta">
+              <span class="gc-card-cat">${this._esc(def.category)}</span>
+              ${def.pins ? `<span class="gc-detail-pins-count">${def.pins.length} pins</span>` : ''}
+            </div>
           </div>
           <div class="gc-detail-actions">
             <button class="gh-btn gh-btn-primary gh-btn-sm" data-place="${this._esc(id)}">Place on canvas</button>
@@ -4633,7 +4656,8 @@ class GuideManager {
         ${codeBlock}
       </div>`;
 
-    root.querySelector('.gc-back').addEventListener('click', () => {
+    const backBtn = root.querySelector('.gc-back');
+    if (backBtn) backBtn.addEventListener('click', () => {
       this._selectedComp = null;
       this._renderComponents();
     });

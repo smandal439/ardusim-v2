@@ -5200,6 +5200,7 @@ _newProject() {
       { id: 'stop', title: 'Stop Simulation', subtitle: 'Halt running microcontroller and reset state', category: 'action', run: () => this.stop() },
       { id: 'compile', title: 'Compile / Verify Sketch', subtitle: 'Verify syntax and check compile errors', category: 'action', shortcut: 'Ctrl+R', run: () => this.compile() },
       { id: 'format', title: 'Format Code', subtitle: 'Reformat sketch with standard indentation', category: 'action', shortcut: 'Alt+Shift+F', run: () => window.EditorManager?.formatCode?.() },
+      { id: 'toggle-file-explorer', title: 'Toggle File Explorer', subtitle: 'Show or hide editor file tree', category: 'action', run: () => window.EditorManager?.toggleFileExplorer?.() },
       { id: 'fit-view', title: 'Fit Circuit to View', subtitle: 'Reset zoom and center circuit', category: 'action', shortcut: 'F', run: () => this.canvas?.fitView?.() },
       { id: 'toggle-minimap', title: 'Toggle Canvas Mini-Map Navigator', subtitle: 'Show or hide circuit overview thumbnail', category: 'action', shortcut: 'M', run: () => this.canvas?.toggleMinimap?.() },
       { id: 'toggle-current-flow', title: 'Toggle Animated Current / Signal Flow', subtitle: 'Show or hide live flowing signal animation on wires', category: 'action', shortcut: 'Alt+C', run: () => this.canvas?.toggleCurrentAnimation?.() },
