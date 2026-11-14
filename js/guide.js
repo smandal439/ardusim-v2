@@ -1811,31 +1811,45 @@ void loop(){
   /* --- SENSORS / COMMUNICATION --- */
   hc05: {
     id: 'hc05',
-    name: 'HC-05 Bluetooth',
-    icon: '📏',
+    name: 'HC-05 Bluetooth Module',
+    icon: '📶',
     category: 'Sensors',
-    longDesc: 'HC-05 serial-to-Bluetooth transceiver module (UART). Pairs with a phone/tablet to send and receive data over Bluetooth Serial Port Profile (SPP). Defaults to 9600 baud. TXD→Arduino RX, RXD→Arduino TX (with voltage divider for 3.3V logic).',
-    use: 'Wireless communication with phone apps, remote control, telemetry. Send characters from phone to Arduino via Bluetooth.',
+    longDesc: 'HC-05 serial-to-Bluetooth transceiver module (UART). Double-click the component on the circuit canvas or right-click to open the interactive Virtual Smartphone Controller. Connect to pair with the HC-05 (its status LED switches from fast-blink to solid cyan glow), send "1" / "0" to toggle outputs with live visual feedback, or use the built-in Bluetooth Terminal for bidirectional UART messaging.',
+    use: 'Wireless communication with mobile apps, remote control, and telemetry. Control Arduino pins wirelessly using the virtual smartphone controller, quick action buttons, or serial terminal.',
     pins: {
-      VCC: { label: 'VCC', type: 'power', desc: 'Power supply (3.6–6V).' },
+      STATE: { label: 'STATE', type: 'digital', desc: 'Status output: HIGH (5V) when paired with a phone/master, LOW when disconnected.' },
+      RXD: { label: 'RXD', type: 'digital', desc: 'UART receive (connects to Arduino TX/D1 or SoftwareSerial TX).' },
+      TXD: { label: 'TXD', type: 'digital', desc: 'UART transmit (connects to Arduino RX/D0 or SoftwareSerial RX).' },
       GND: { label: 'GND', type: 'gnd', desc: 'Ground.' },
-      TXD: { label: 'TXD', type: 'digital', desc: 'Bluetooth TX → Arduino RX (D0).' },
-      RXD: { label: 'RXD', type: 'digital', desc: 'Bluetooth RX → Arduino TX (D1) via voltage divider.' },
+      VCC: { label: 'VCC', type: 'power', desc: 'Power supply (3.6V–6V DC).' },
+      EN: { label: 'EN / KEY', type: 'digital', desc: 'AT command mode toggle pin (pull HIGH for AT mode).' },
     },
     props: {
-      connected: 'Toggle Bluetooth connection status (simulated).',
+      connected: 'Boolean indicating whether the Bluetooth module is paired with the phone controller.',
+      rxData: 'Serial data string received over the air.',
     },
-    wiring: 'VCC→5V, GND→GND, TXD→Arduino D0 (RX), RXD→Arduino D1 (TX via 1k°/2k° divider).',
-    code: `void setup(){
-  Serial.begin(9600);
-  pinMode(13, OUTPUT);
+    wiring: 'VCC→5V, GND→GND, TXD→Arduino D0 (RX), RXD→Arduino D1 (TX).',
+    code: `/* HC-05 Bluetooth LED Control */
+int ledPin = 13;
+
+void setup() {
+  pinMode(ledPin, OUTPUT);
+  Serial.begin(115200);
+  digitalWrite(ledPin, LOW);
 }
-void loop(){
+
+void loop() {
   if (Serial.available() > 0) {
     char c = Serial.read();
-    if (c == '1') { digitalWrite(13, HIGH); Serial.println("LED ON"); }
-    if (c == '0') { digitalWrite(13, LOW);  Serial.println("LED OFF"); }
+    if (c == '1') {
+      digitalWrite(ledPin, HIGH);
+      Serial.println("LED ON");
+    } else if (c == '0') {
+      digitalWrite(ledPin, LOW);
+      Serial.println("LED OFF");
+    }
   }
+  delay(50);
 }`,
     exampleId: 'hc05_bluetooth_led',
   },
@@ -4203,14 +4217,58 @@ int ledPin = 13;
   },
 
   {
+    id: 'bluetooth-phone-control',
+    title: 'HC-05 Bluetooth Remote Control (Virtual Smartphone)',
+    icon: '📱',
+    level: 'Intermediate',
+    tags: ['bluetooth', 'wireless', 'smartphone', 'uart', 'hc05'],
+    summary: 'Pair the HC-05 module with a simulated smartphone controller to wirelessly turn LEDs on/off and send serial commands.',
+    steps: [
+      'Load the "HC-05 Bluetooth LED Control" example from the Examples panel, or place an Arduino Uno, HC-05 module, and an LED.',
+      'Wire the HC-05 module: VCC→5V, GND→GND, TXD→D0 (Arduino RX), RXD→D1 (Arduino TX). Wire the LED anode to pin 13 via a 220Ω resistor to GND.',
+      'Click Run (or press F5) to start the simulation — notice the HC-05 status LED blinks rapidly in pairing mode.',
+      'Double-click the HC-05 module on the canvas (or right-click → "Open Virtual Smartphone Controller") to open the phone popup.',
+      'Tap "Connect" on the phone — the HC-05 on-board LED changes to a solid blue glow and the STATE pin goes HIGH.',
+      'Tap "LED ON" (sends \'1\') or "LED OFF" (sends \'0\') to toggle the LED, or use the Terminal tab to send custom text.',
+      'Watch the phone\'s real-time hardware status lamp and terminal log reflect responses ("LED ON", "LED OFF") from the Arduino.',
+    ],
+    wiring: 'HC-05 TXD→D0, RXD→D1, VCC→5V, GND→GND; Pin 13→220Ω→LED anode, cathode→GND.',
+    code: `/* HC-05 Bluetooth LED Control */
+int ledPin = 13;
+
+void setup() {
+  pinMode(ledPin, OUTPUT);
+  Serial.begin(115200);
+  digitalWrite(ledPin, LOW);
+}
+
+void loop() {
+  if (Serial.available() > 0) {
+    char c = Serial.read();
+    if (c == '1') {
+      digitalWrite(ledPin, HIGH);
+      Serial.println("LED ON");
+    } else if (c == '0') {
+      digitalWrite(ledPin, LOW);
+      Serial.println("LED OFF");
+    }
+  }
+  delay(50);
+}`,
+    exampleId: 'hc05_bluetooth_led',
+  },
+
+  {
     id: 'keyboard-shortcuts',
-    title: 'Keyboard Shortcuts',
-    icon: '⬟',
+    title: 'Keyboard Shortcuts & Canvas Navigation',
+    icon: '⌨️',
     level: 'Beginner',
-    tags: ['shortcuts', 'productivity', 'keyboard'],
-    summary: 'Speed up your workflow with these keyboard shortcuts for circuit editing and simulation.',
+    tags: ['shortcuts', 'productivity', 'keyboard', 'navigation'],
+    summary: 'Speed up your workflow with keyboard shortcuts and full keyboard canvas navigation.',
     steps: [
       'Select a push button on the canvas and press Space or Enter to toggle it — no need to click.',
+      'Tab / Shift+Tab to navigate between components and pins on the canvas; Space to inspect or initiate wiring.',
+      'Click the on-board red reset button on the Arduino Uno or Nano (or pull the physical RST pin LOW) to restart sketch execution.',
       'Press R to rotate the selected component by 90°.',
       'Press Delete or Backspace to delete the selected component or wire.',
       'Press F to fit the entire circuit in view.',
@@ -4235,12 +4293,12 @@ const GUIDE_HOME = {
   tagline: 'Simulate Arduino circuits in your browser — no install, no hardware.',
   intro: 'ArduSim is a full Arduino development environment that runs entirely in your browser. Write Arduino C++ in a VS Code-grade editor, drag components onto a live circuit canvas, wire them up, and hit Run — the simulation, Serial Monitor, oscilloscope and plotter all respond instantly.',
   features: [
-    { icon: '⬟', title: 'Real-time Simulation', desc: 'Arduino code transpiles and runs in the browser at 0.25°–10° speed with infinite-loop protection.' },
-    { icon: '⬟', title: 'VS Code-grade Editor', desc: 'Monaco-powered editor with autocomplete, syntax highlighting, diagnostics and formatting.' },
-    { icon: '⬟', title: 'Drag & Drop Circuitry', desc: '25+ components, click-to-connect wiring, grid snapping, rotate/duplicate/undo and PNG export.' },
-    { icon: '⬟', title: 'Serial Monitor & Plotter', desc: 'Live bi-directional serial I/O, multi-channel oscilloscope and a real-time data plotter.' },
-    { icon: '⬟', title: 'Pin Monitor', desc: 'A live colour-coded board showing the state and mode of every pin.' },
-    { icon: '⬟', title: 'Project Management', desc: 'Auto-save, portable JSON export/import, saved projects and one-click URL sharing.' },
+    { icon: '⚡', title: 'Real-time Simulation', desc: 'Arduino code transpiles and runs in the browser at 0.25×–10× speed with infinite-loop protection.' },
+    { icon: '📱', title: 'Virtual Smartphone & Remote', desc: 'Simulated Bluetooth mobile controller for HC-05 and MQTT-based real smartphone remote control.' },
+    { icon: '🖥️', title: 'VS Code-grade Editor', desc: 'Monaco-powered editor with autocomplete, syntax highlighting, diagnostics and formatting.' },
+    { icon: '🎨', title: 'Drag & Drop Circuitry', desc: '40+ components, on-canvas quick controls, live wire probes, wire jump arcs, and PNG export.' },
+    { icon: '📊', title: 'Diagnostic Instruments', desc: 'Detachable Oscilloscope, Logic Analyzer, Serial Monitor, and live data Plotter with pop-out windows.' },
+    { icon: '💾', title: 'Project Management', desc: 'Auto-save, portable JSON export/import, saved projects and one-click URL sharing.' },
   ],
   steps: [
     { title: 'Pick a component', desc: 'Browse the library on the right and click a component to place it on the canvas.' },

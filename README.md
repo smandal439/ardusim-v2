@@ -54,12 +54,24 @@
 
 ### 🎨 High-Performance Circuit Canvas
 - **Vector-based HTML5 Canvas**: Smooth rendering with 60 FPS pan and zoom.
+- **On-Canvas Quick-Controls**: Floating sliders, toggles, and shortcuts (including `📱 Phone` on the HC-05) appear directly above selected components for instant tweaking without opening dialogs.
+- **Live Wire Probing & Wire Jump Arcs**: Visual bridge arcs at wire crossings keep complex circuits clear; hover or probe any wire for real-time voltage and logic readouts.
+- **Animated Current Flow**: Toggleable animated current particles visualizing electron/current flow direction and activity.
+- **Tactile On-Board Reset & RST Pin**: Click the on-board red reset button on Arduino Uno/Nano with tactile press animation, or pull the physical `RST` pin LOW to trigger an instant board reboot without stopping the simulation.
+- **Keyboard Navigation**: Full canvas keyboard accessibility (`Tab` / `Shift+Tab` to traverse components and pins, `Space` to inspect/wire).
 - **Grid Snapping**: Precision component positioning with visual alignment.
 - **Interactive Wiring**: Click-to-connect pin-to-pin wiring with live signal coloring (HIGH/LOW/PWM).
 - **Clipboard & Manipulation**: `Ctrl+C` / `Ctrl+V`, `Ctrl+D` (Duplicate), `R` (Rotate), `Del` (Delete), and Undo/Redo history stack.
 - **Circuit Labels**: Set a custom label for any component in its properties, or use the canvas **T** tool to place, move, edit (double-click), and delete free-text annotations. Labels are saved with the circuit and included in PNG exports.
-- **Context Menu**: Right-click actions for properties, rotation, duplication, and deletion.
+- **Context Menu**: Right-click actions for properties, rotation, duplication, deletion, and component-specific tools.
 - **Exporting**: One-click circuit diagram export to PNG.
+
+### 📱 Virtual Smartphone Bluetooth Controller (HC-05)
+- **Floating Mobile Phone Window**: Double-click the HC-05 module on the canvas (or right-click → *Open Virtual Smartphone Controller*) to launch an interactive mobile app controller.
+- **Realistic Pairing & Telemetry**: Tap **Connect** — the HC-05 module's status LED transitions from a 5Hz pairing blink to a solid glowing cyan, and the `STATE` pin drives HIGH (5V).
+- **Dedicated Buttons**: Big **LED ON** (sends `'1'`), **LED OFF** (sends `'0'`), and **Toggle** buttons with a real-time glowing hardware status bulb.
+- **Built-in Serial Terminal**: Full bidirectional console with timestamped `TX` and `RX` message badges, selectable line endings (`None`, `\n`, `\r\n`), and quick command macros.
+- **Minimizable & Draggable**: Drag the phone anywhere across the workspace or click `—` to collapse it into a compact floating pill widget (`📱 HC-05 · Connected`).
 
 ### 🏭 Virtual PLC and Ladder Logic
 - Add the **Ardu-PLC 328** from the board selector or Boards component library.
@@ -68,6 +80,7 @@
 - Ladder programs are included in saved, downloaded, auto-saved, and shared circuit projects. This is a virtual educational model, not a safety-certified or hardware-compatible industrial PLC; parallel branches and IEC 61131-3 portability are not currently provided.
 
 ### 📊 Diagnostic Instruments
+- **Detachable Floating Windows**: Pop out any instrument into an independent floating, draggable window using the `⧉` pop-out button on the tab bar.
 - **Serial Monitor**:
   - Live bi-directional communication.
   - Multi-line buffer (up to 5,000 lines).
@@ -76,6 +89,7 @@
   - One-click clipboard copy and text export.
 - **Digital Oscilloscope**: Real-time multi-channel waveform capture for PWM and analog signals with configurable timebase and edge triggering.
 - **Serial Plotter**: Graphs numeric `Serial.print` / `Serial.println` values in real time.
+- **Logic Analyzer**: Multi-channel digital timing analyzer with cursor ΔT measurements.
 - **Pin Monitor**: Live color-coded status board of all 20 Arduino pins (D0–D13, A0–A5) with level indicators, direction modes, and PWM bars.
 
 ### 💾 Project & State Management
@@ -227,11 +241,17 @@ The simulator supports multiple wireless communication protocols for multi-board
   ```
 - **Examples**: Zigbee Sender/Receiver, Sensor Network, Bidirectional LED Control
 
-### Bluetooth Serial
-- **Library**: `<BluetoothSerial.h>`
-- **Pattern**: Classic Bluetooth SPP between two ESP32 boards
-- **Features**: Serial-like communication over Bluetooth
-- **Example**: Bluetooth Serial Bridge
+### Bluetooth (HC-05 & BluetoothSerial)
+- **HC-05 Bluetooth Module**:
+  - **Component**: `HC-05 Bluetooth` transceiver (Communication category).
+  - **Interface**: Double-click or right-click the HC-05 module on the canvas to open the **Virtual Smartphone Bluetooth Controller**.
+  - **Features**: Realistic wireless pairing (module status LED turns solid cyan, `STATE` pin goes HIGH), big **LED ON** (sends `'1'`) and **LED OFF** (sends `'0'`) buttons with live visual feedback, and a built-in bidirectional serial terminal.
+  - **Wiring**: `TXD` → Arduino `RX` (D0 or SoftwareSerial), `RXD` → Arduino `TX` (D1 or SoftwareSerial), `VCC` → 5V, `GND` → GND.
+  - **Example**: HC-05 Bluetooth LED Control
+- **ESP32 Classic Bluetooth**:
+  - **Library**: `<BluetoothSerial.h>`
+  - **Pattern**: Classic Bluetooth SPP between two ESP32 boards across a shared wireless bus.
+  - **Example**: Bluetooth Serial Bridge
 
 ### CoAP (Constrained Application Protocol)
 - **Library**: `<coap.h>` or `<coap-simple.h>`
@@ -313,10 +333,12 @@ No build step or Node.js environment is required. You can host this static web a
 ├── remote.html         # Phone remote control page
 ├── css/
 │   ├── style.css       # Main styling, themes, and responsive rules
+│   ├── bluetooth-phone.css # Virtual smartphone Bluetooth controller styling
 │   └── remote.css      # Phone remote control styles
 ├── js/
 │   ├── app.js          # Core app logic, UI bindings, dropdowns
 │   ├── canvas.js       # Circuit canvas, wiring, pan/zoom
+│   ├── bluetooth-controller.js # Virtual smartphone Bluetooth controller
 │   ├── simulator.js    # Arduino code transpilation & execution
 │   ├── editor.js       # Monaco editor integration
 │   ├── serial_monitor.js # Serial monitor
