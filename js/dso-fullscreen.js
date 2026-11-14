@@ -356,7 +356,9 @@ class DSOFullscreen {
     }
 
     // ── Waveforms ──
-    const t = inst._lastSimTime || performance.now() / 1000;
+    const t = (inst._lastSimTime !== undefined && Number.isFinite(inst._lastSimTime))
+      ? inst._lastSimTime
+      : (performance.now() / 1000);
     const buf = inst._buffers;
     const totalTime = P('timebase', 0.001) * divsX;
 
@@ -369,6 +371,43 @@ class DSOFullscreen {
       }
       return lo;
     };
+
+    // ── Trigger stabilization ──
+    const trigSource = P('trig_source', 'ch1');
+    const trigLevel = P('trig_level', 0);
+    const trigSlope = P('trig_slope', 'rising');
+    const trigSamples = buf && buf[trigSource] && buf[trigSource].length > 1 ? buf[trigSource] : null;
+    const tS_all = buf && buf.t && buf.t.length > 1 ? buf.t : null;
+
+    let triggerT = null;
+    let refPx = scrW / 2;
+    if (trigSamples && tS_all && trigSamples.length > 1) {
+      const tEnd = tS_all[tS_all.length - 1];
+      let latestT = null;
+      for (let i = trigSamples.length - 1; i >= 1; i--) {
+        const vPrev = trigSamples[i - 1];
+        const vCurr = trigSamples[i];
+        const isCrossing = trigSlope === 'rising'
+          ? (vPrev < trigLevel && vCurr >= trigLevel)
+          : (vPrev > trigLevel && vCurr <= trigLevel);
+        if (isCrossing) {
+          const frac = (trigLevel - vPrev) / (vCurr - vPrev || 1e-9);
+          const tCross = tS_all[i - 1] + (tS_all[i] - tS_all[i - 1]) * Math.max(0, Math.min(1, frac));
+          if (latestT === null) latestT = tCross;
+          if (tCross <= tEnd - totalTime * 0.4) {
+            triggerT = tCross;
+            break;
+          }
+        }
+      }
+      if (triggerT === null && latestT !== null) {
+        triggerT = latestT;
+      }
+      if (triggerT !== null) {
+        const availRightPx = (tEnd - triggerT) / (totalTime / scrW);
+        refPx = Math.max(0, Math.min(scrW / 2, scrW - availRightPx));
+      }
+    }
 
     if (isPowered) {
       const channels = [
@@ -392,7 +431,9 @@ class DSOFullscreen {
           if (ch.coup === 'gnd') {
             v = 0;
           } else if (samples && tS && samples.length > 1) {
-            const target = t - totalTime * (1 - px / scrW);
+            const target = triggerT !== null
+              ? triggerT + (px - refPx) * (totalTime / scrW)
+              : t - totalTime * (1 - px / scrW);
             const idx = _fsBinSearch(tS, target);
             // Linear interpolation between bracketing samples
             if (idx < samples.length - 1 && tS[idx + 1] !== tS[idx]) {
@@ -464,7 +505,9 @@ class DSOFullscreen {
         const pf2 = P('ch2_probe', 1);
         const vdiv = P('ch1_vdiv', 1);
         for (let px = 0; px < scrW; px++) {
-          const target = t - totalTime * (1 - px / scrW);
+          const target = triggerT !== null
+            ? triggerT + (px - refPx) * (totalTime / scrW)
+            : t - totalTime * (1 - px / scrW);
           const idx = _fsBinSearch(tS, target);
           const v1 = (ch1Samples[idx] || 0) * pf1;
           const v2 = (ch2Samples[idx] || 0) * pf2;
@@ -794,8 +837,8 @@ class DSOFullscreen {
     ctx.font = `${Math.round(9 * fs)}px monospace`;
     ctx.textAlign = 'left';
     const trigSrc = (P('trig_source', 'ch1')).toUpperCase();
-    const trigSlope = P('trig_slope', 'rising') === 'falling' ? '\\' : '/';
-    ctx.fillText('T:' + trigSrc + ' ' + trigSlope + ' ' + this._fmtV(P('trig_level', 0)), scrX + 10, osdBotY + 12);
+    const trigSlopeSym = P('trig_slope', 'rising') === 'falling' ? '\\' : '/';
+    ctx.fillText('T:' + trigSrc + ' ' + trigSlopeSym + ' ' + this._fmtV(P('trig_level', 0)), scrX + 10, osdBotY + 12);
 
     ctx.fillStyle = '#7a889b';
     ctx.textAlign = 'right';
@@ -2029,7 +2072,16 @@ class DSOFullscreen {
       const periodSamples = risingCrossings.length > 1
         ? (risingCrossings[risingCrossings.length - 1] - risingCrossings[0]) / (risingCrossings.length - 1)
         : 0;
-      const freq = periodSamples > 0 ? sampleRate / periodSamples : 0;
+      let freq = periodSamples > 0 ? sampleRate / periodSamples : 0;
+      if (freq <= 0 && typeof _dsoFindConnectedFG === 'function') {
+        const fgConn = _dsoFindConnectedFG(this.inst, trigCh + '_in');
+        if (fgConn && fgConn.inst) {
+          const fgInst = fgConn.inst;
+          const fgCh = (fgConn.pinId === 'ch2_out') ? 'ch2' : 'ch1';
+          const fgFreq = Number(fgInst.runtimeState?.[fgCh + '_freq'] ?? fgInst.props?.[fgCh + '_freq'] ?? (fgCh === 'ch1' ? 440 : 880));
+          if (fgFreq > 0) freq = fgFreq;
+        }
+      }
       if (freq > 0) {
         const period = 1 / freq;
         const targetTimebase = (period * 3) / 12; // 3 cycles across 12 divisions

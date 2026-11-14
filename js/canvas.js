@@ -1393,6 +1393,12 @@ class CircuitCanvas {
         props.runStop = rs.runStop;
         break;
       }
+      case 'pause': {
+        const cur = rs.paused !== undefined ? rs.paused : (props.paused ?? 0);
+        rs.paused = cur ? 0 : 1;
+        props.paused = rs.paused;
+        break;
+      }
       case 'single': {
         const cur = rs.singleTrigger !== undefined ? rs.singleTrigger : (props.singleTrigger ?? 0);
         rs.singleTrigger = cur ? 0 : 1;

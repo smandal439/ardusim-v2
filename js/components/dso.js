@@ -175,46 +175,27 @@ defComp({
     }
 
     // Detect connected function generators for sub-frame analytical sampling
-    const _findConnectedFG = (dsoInst, pinId) => {
-      const cc = window.CircuitCanvas;
-      if (cc && typeof cc._getWireTarget === 'function') {
-        const target = cc._getWireTarget(dsoInst.id, pinId);
-        if (target && target.inst && target.inst.type === 'func_gen') {
-          return { inst: target.inst, pinId: target.pinId };
-        }
-      }
-      if (cc && Array.isArray(cc.wires) && Array.isArray(cc.components)) {
-        for (const wire of cc.wires) {
-          const matchesFrom = wire.from?.instId === dsoInst.id && wire.from?.pinId === pinId;
-          const matchesTo = wire.to?.instId === dsoInst.id && wire.to?.pinId === pinId;
-          if (!matchesFrom && !matchesTo) continue;
-          const otherId = matchesFrom ? wire.to?.instId : wire.from?.instId;
-          const otherPin = matchesFrom ? wire.to?.pinId : wire.from?.pinId;
-          const other = cc.components.find(component => component.id === otherId);
-          if (other?.type === 'func_gen') return { inst: other, pinId: otherPin };
-        }
-      }
-      return null;
-    };
-
     const _calcWaveAnalytical = (fgConn, maybePinOrTime, maybeTime) => {
       if (!fgConn) return null;
       const fgInst = fgConn.inst || fgConn;
       const pinId = typeof maybePinOrTime === 'string' ? maybePinOrTime : (fgConn.pinId || 'ch1_out');
       const sampleT = typeof maybePinOrTime === 'number' ? maybePinOrTime : maybeTime;
       const ch = pinId === 'ch2_out' ? 'ch2' : 'ch1';
-      const fgDef = window.ArduinoComponents?.COMPONENT_DEFS?.func_gen;
+      const fgDef = (window.ArduinoComponents && window.ArduinoComponents.COMPONENT_DEFS && window.ArduinoComponents.COMPONENT_DEFS.func_gen)
+        || (typeof COMPONENT_DEFS !== 'undefined' && COMPONENT_DEFS.func_gen);
       if (fgDef && typeof fgDef.evaluateChannel === 'function') {
         return fgDef.evaluateChannel(fgInst, ch, sampleT);
       }
       const fgProps = fgInst.props || {};
+      const fgRs = fgInst.runtimeState || {};
+      const Pfg = (f, def) => (fgRs[f] !== undefined ? fgRs[f] : (fgProps[f] ?? def));
       const isCh1 = ch === 'ch1';
-      const wave = fgProps[isCh1 ? 'ch1_wave' : 'ch2_wave'] || 'sine';
-      const freq = fgProps[isCh1 ? 'ch1_freq' : 'ch2_freq'] || 440;
-      const amp = fgProps[isCh1 ? 'ch1_amp' : 'ch2_amp'] || 5;
-      const offset = fgProps[isCh1 ? 'ch1_offset' : 'ch2_offset'] || 0;
-      const phaseDeg = fgProps[isCh1 ? 'ch1_phase' : 'ch2_phase'] || 0;
-      const duty = fgProps[isCh1 ? 'ch1_duty' : 'ch2_duty'] || 50;
+      const wave = Pfg(isCh1 ? 'ch1_wave' : 'ch2_wave', 'sine');
+      const freq = Number(Pfg(isCh1 ? 'ch1_freq' : 'ch2_freq', 440));
+      const amp = Number(Pfg(isCh1 ? 'ch1_amp' : 'ch2_amp', 5));
+      const offset = Number(Pfg(isCh1 ? 'ch1_offset' : 'ch2_offset', 0));
+      const phaseDeg = Number(Pfg(isCh1 ? 'ch1_phase' : 'ch2_phase', 0));
+      const duty = Number(Pfg(isCh1 ? 'ch1_duty' : 'ch2_duty', 50));
       const phaseRad = phaseDeg * Math.PI / 180;
       const tau = ((sampleT * freq + phaseRad / (2 * Math.PI)) % 1 + 1) % 1;
       const dutyFrac = duty / 100;
@@ -226,7 +207,7 @@ defComp({
         case 'ramp_down': v = 1 - 2 * tau; break;
         case 'staircase': v = Math.floor(tau * 8.0) / 3.5 - 1.0; break;
         case 'pattern': {
-          const pat = String(fgProps[isCh1 ? 'ch1_pattern' : 'ch2_pattern'] || '1110010').match(/[01]/g) || ['1', '1', '1', '0', '0', '1', '0'];
+          const pat = String(Pfg(isCh1 ? 'ch1_pattern' : 'ch2_pattern', '1110010')).match(/[01]/g) || ['1', '1', '1', '0', '0', '1', '0'];
           const bIdx = Math.min(pat.length - 1, Math.max(0, Math.floor(tau * pat.length)));
           v = pat[bIdx] === '1' ? 1 : -1;
           break;
@@ -238,11 +219,11 @@ defComp({
       return offset + v * (amp / 2);
     };
 
-    const fg1 = _findConnectedFG(inst, 'ch1_in');
-    const fg2 = _findConnectedFG(inst, 'ch2_in');
-    const fg3 = _findConnectedFG(inst, 'ch3_in');
-    const fg4 = _findConnectedFG(inst, 'ch4_in');
-    const hasFG = fg1 || fg2 || fg3 || fg4;
+    const fg1 = _dsoFindConnectedFG(inst, 'ch1_in');
+    const fg2 = _dsoFindConnectedFG(inst, 'ch2_in');
+    const fg3 = _dsoFindConnectedFG(inst, 'ch3_in');
+    const fg4 = _dsoFindConnectedFG(inst, 'ch4_in');
+    const hasFG = Boolean(fg1 || fg2 || fg3 || fg4);
 
     // Sub-frame analytical sampling when function generators are connected
     // Keep enough analytical samples for the complete screen window without
@@ -251,33 +232,45 @@ defComp({
     const MAX_SAMPLES = 200000;
     const MAX_PER_FRAME = 50000;
     const maxSamples = Math.max(1024, Math.min(MAX_SAMPLES, Math.ceil(TARGET_RATE * totalTime)));
-    const lastT = inst._lastSampleTime || 0;
-    const dt = t - lastT;
+    const lastT = inst._lastSampleTime;
+    const dt = (lastT !== undefined && Number.isFinite(lastT)) ? t - lastT : 0;
     let subFramePushed = false;
 
-    if (hasFG && dt > 0 && buf.t.length > 0) {
-      const numSamples = Math.min(Math.ceil(dt * TARGET_RATE), maxSamples - buf.t.length, MAX_PER_FRAME);
-      if (numSamples > 1) {
-        for (let i = 0; i < numSamples; i++) {
-          const frac = (i + 1) / numSamples;
-          const sampleT = lastT + dt * frac;
-          buf.t.push(sampleT);
-          buf.ch1.push(fg1 ? _calcWaveAnalytical(fg1, 'ch1_out', sampleT) * probeFactor1 : (prevV[0] + (v1 - prevV[0]) * frac) * probeFactor1);
-          buf.ch2.push(fg2 ? _calcWaveAnalytical(fg2, 'ch2_out', sampleT) * probeFactor2 : (prevV[1] + (v2 - prevV[1]) * frac) * probeFactor2);
-          buf.ch3.push(fg3 ? _calcWaveAnalytical(fg3, 'ch3_out', sampleT) * probeFactor3 : (prevV[2] + (v3 - prevV[2]) * frac) * probeFactor3);
-          buf.ch4.push(fg4 ? _calcWaveAnalytical(fg4, 'ch4_out', sampleT) * probeFactor4 : (prevV[3] + (v4 - prevV[3]) * frac) * probeFactor4);
-        }
-        subFramePushed = true;
+    // Detect time discontinuity (e.g. simulation start/stop, simTime reset, or large gap)
+    if (dt < 0 || dt > 1.0 || lastT === undefined || !Number.isFinite(lastT)) {
+      buf.ch1.length = 0;
+      buf.ch2.length = 0;
+      buf.ch3.length = 0;
+      buf.ch4.length = 0;
+      buf.t.length = 0;
+      inst._lastSampleTime = t;
+    } else if (hasFG && dt > 0) {
+      const numSamples = Math.max(2, Math.min(Math.ceil(dt * TARGET_RATE), maxSamples, MAX_PER_FRAME));
+      for (let i = 0; i < numSamples; i++) {
+        const frac = (i + 1) / numSamples;
+        const sampleT = lastT + dt * frac;
+        buf.t.push(sampleT);
+        buf.ch1.push(fg1 ? _calcWaveAnalytical(fg1, fg1.pinId, sampleT) * probeFactor1 : (prevV[0] + (v1 - prevV[0]) * frac) * probeFactor1);
+        buf.ch2.push(fg2 ? _calcWaveAnalytical(fg2, fg2.pinId, sampleT) * probeFactor2 : (prevV[1] + (v2 - prevV[1]) * frac) * probeFactor2);
+        buf.ch3.push(fg3 ? _calcWaveAnalytical(fg3, fg3.pinId, sampleT) * probeFactor3 : (prevV[2] + (v3 - prevV[2]) * frac) * probeFactor3);
+        buf.ch4.push(fg4 ? _calcWaveAnalytical(fg4, fg4.pinId, sampleT) * probeFactor4 : (prevV[3] + (v4 - prevV[3]) * frac) * probeFactor4);
       }
+      subFramePushed = true;
+      inst._lastSampleTime = t;
     }
 
     // Push live sample (skip if sub-frame already covered this step)
     if (!subFramePushed) {
-      buf.ch1.push(v1 * probeFactor1);
-      buf.ch2.push(v2 * probeFactor2);
-      buf.ch3.push(v3 * probeFactor3);
-      buf.ch4.push(v4 * probeFactor4);
+      const s1 = fg1 ? _calcWaveAnalytical(fg1, fg1.pinId, t) * probeFactor1 : v1 * probeFactor1;
+      const s2 = fg2 ? _calcWaveAnalytical(fg2, fg2.pinId, t) * probeFactor2 : v2 * probeFactor2;
+      const s3 = fg3 ? _calcWaveAnalytical(fg3, fg3.pinId, t) * probeFactor3 : v3 * probeFactor3;
+      const s4 = fg4 ? _calcWaveAnalytical(fg4, fg4.pinId, t) * probeFactor4 : v4 * probeFactor4;
+      buf.ch1.push(s1);
+      buf.ch2.push(s2);
+      buf.ch3.push(s3);
+      buf.ch4.push(s4);
       buf.t.push(t);
+      inst._lastSampleTime = t;
     }
     inst._lastSampleTime = t;
 
@@ -326,7 +319,9 @@ defComp({
     const props = inst.props || {};
     const rs = inst.runtimeState || {};
     const W = 440, H = 300;
-    const t = sim && typeof sim.time === 'number' ? sim.time : performance.now() / 1000;
+    const t = (inst._lastSimTime !== undefined && Number.isFinite(inst._lastSimTime))
+      ? inst._lastSimTime
+      : (sim && typeof sim.simTime === 'number' ? sim.simTime / 1000 : performance.now() / 1000);
     const isPowered = _dsoBool(inst.runtimeState?.powered ?? inst.props?.powered ?? 1);
     const isRunning = _dsoBool(rs.runStop !== undefined ? rs.runStop : (inst.props?.runStop ?? 1));
     const isSingleArmed = _dsoBool(rs.singleTrigger !== undefined ? rs.singleTrigger : (inst.props?.singleTrigger ?? 0));
@@ -473,6 +468,44 @@ defComp({
       return lo;
     };
 
+    // ── Trigger stabilization ──
+    // Lock the horizontal phase to a trigger crossing so periodic signals remain stationary
+    const trigSource = P('trig_source', 'ch1');
+    const trigLevel = P('trig_level', 0);
+    const trigSlope = P('trig_slope', 'rising');
+    const trigSamples = buf && buf[trigSource] && buf[trigSource].length > 1 ? buf[trigSource] : null;
+    const tS_all = buf && buf.t && buf.t.length > 1 ? buf.t : null;
+
+    let triggerT = null;
+    let refPx = scrW / 2;
+    if (trigSamples && tS_all && trigSamples.length > 1) {
+      const tEnd = tS_all[tS_all.length - 1];
+      let latestT = null;
+      for (let i = trigSamples.length - 1; i >= 1; i--) {
+        const vPrev = trigSamples[i - 1];
+        const vCurr = trigSamples[i];
+        const isCrossing = trigSlope === 'rising'
+          ? (vPrev < trigLevel && vCurr >= trigLevel)
+          : (vPrev > trigLevel && vCurr <= trigLevel);
+        if (isCrossing) {
+          const frac = (trigLevel - vPrev) / (vCurr - vPrev || 1e-9);
+          const tCross = tS_all[i - 1] + (tS_all[i] - tS_all[i - 1]) * Math.max(0, Math.min(1, frac));
+          if (latestT === null) latestT = tCross;
+          if (tCross <= tEnd - totalTime * 0.4) {
+            triggerT = tCross;
+            break;
+          }
+        }
+      }
+      if (triggerT === null && latestT !== null) {
+        triggerT = latestT;
+      }
+      if (triggerT !== null) {
+        const availRightPx = (tEnd - triggerT) / (totalTime / scrW);
+        refPx = Math.max(0, Math.min(scrW / 2, scrW - availRightPx));
+      }
+    }
+
     if (isPowered) {
 
     channels.forEach((ch) => {
@@ -491,7 +524,9 @@ defComp({
           if (ch.coup === 'gnd') {
             v = 0;
           } else if (samples && tS && samples.length > 1) {
-            const target = t - totalTime * (1 - px / scrW);
+            const target = triggerT !== null
+              ? triggerT + (px - refPx) * (totalTime / scrW)
+              : t - totalTime * (1 - px / scrW);
             const idx = _dsoBinSearch(tS, target);
             // Linear interpolation between bracketing samples
             if (idx < samples.length - 1 && tS[idx + 1] !== tS[idx]) {
@@ -558,7 +593,9 @@ defComp({
       const vdiv = P('ch1_vdiv', 1);
       const pos = 0;
       for (let px = 0; px < scrW; px++) {
-        const target = t - totalTime * (1 - px / scrW);
+        const target = triggerT !== null
+          ? triggerT + (px - refPx) * (totalTime / scrW)
+          : t - totalTime * (1 - px / scrW);
         const idx = _dsoBinSearch(tS, target);
         const v1 = (ch1Samples[idx] || 0) * pf1;
         const v2 = (ch2Samples[idx] || 0) * pf2;
@@ -768,8 +805,8 @@ defComp({
     ctx.font = '7px monospace';
     ctx.textAlign = 'left';
     const trigSrc = (P('trig_source', 'ch1')).toUpperCase();
-    const trigSlope = P('trig_slope', 'rising') === 'falling' ? '\\' : '/';
-    ctx.fillText('T:' + trigSrc + ' ' + trigSlope + ' ' + _fmtV(P('trig_level', 0)), scrX + 8, osdBotY + 10);
+    const trigSlopeSym = P('trig_slope', 'rising') === 'falling' ? '\\' : '/';
+    ctx.fillText('T:' + trigSrc + ' ' + trigSlopeSym + ' ' + _fmtV(P('trig_level', 0)), scrX + 8, osdBotY + 10);
 
     ctx.fillStyle = '#7a889b';
     ctx.textAlign = 'right';
@@ -1196,7 +1233,16 @@ function _dsoAutoSet(inst, rs, buf, P) {
     const periodSamples = risingCrossings.length > 1
       ? (risingCrossings[risingCrossings.length - 1] - risingCrossings[0]) / (risingCrossings.length - 1)
       : 0;
-    const freq = periodSamples > 0 ? sampleRate / periodSamples : 0;
+    let freq = periodSamples > 0 ? sampleRate / periodSamples : 0;
+    if (freq <= 0) {
+      const fgConn = _dsoFindConnectedFG(inst, chId + '_in');
+      if (fgConn && fgConn.inst) {
+        const fgInst = fgConn.inst;
+        const fgCh = (fgConn.pinId === 'ch2_out') ? 'ch2' : 'ch1';
+        const fgFreq = Number(fgInst.runtimeState?.[fgCh + '_freq'] ?? fgInst.props?.[fgCh + '_freq'] ?? (fgCh === 'ch1' ? 440 : 880));
+        if (fgFreq > 0) freq = fgFreq;
+      }
+    }
     if (freq > 0) {
       const period = 1 / freq;
       const targetTimebase = (period * 3) / 12;
@@ -1216,6 +1262,30 @@ function _dsoFindProbe(probeType) {
   const comps = canvas.components || [];
   for (let i = 0; i < comps.length; i++) {
     if (comps[i].type === probeType) return comps[i];
+  }
+  return null;
+}
+
+/* ── Connected Function Generator Finder ── */
+function _dsoFindConnectedFG(dsoInst, pinId) {
+  if (!dsoInst) return null;
+  const cc = window.CircuitCanvas;
+  if (cc && typeof cc._getWireTarget === 'function') {
+    const target = cc._getWireTarget(dsoInst.id, pinId);
+    if (target && target.inst && target.inst.type === 'func_gen') {
+      return { inst: target.inst, pinId: target.pinId };
+    }
+  }
+  if (cc && Array.isArray(cc.wires) && Array.isArray(cc.components)) {
+    for (const wire of cc.wires) {
+      const matchesFrom = wire.from?.instId === dsoInst.id && wire.from?.pinId === pinId;
+      const matchesTo = wire.to?.instId === dsoInst.id && wire.to?.pinId === pinId;
+      if (!matchesFrom && !matchesTo) continue;
+      const otherId = matchesFrom ? wire.to?.instId : wire.from?.instId;
+      const otherPin = matchesFrom ? wire.to?.pinId : wire.from?.pinId;
+      const other = cc.components.find(component => component.id === otherId);
+      if (other?.type === 'func_gen') return { inst: other, pinId: otherPin };
+    }
   }
   return null;
 }
