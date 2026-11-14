@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -123,5 +123,93 @@ describe('Arduino Uno R3 layout (Tinkercad & Wokwi real board style)', () => {
     expect(pinMap['GND3']).toBeDefined();
     expect(pinMap['5V2'].type).toBe('power');
     expect(pinMap['GND3'].type).toBe('gnd');
+  });
+
+  it('increases board size slightly and provides adequate pin spacing to avoid overlaps', () => {
+    // Board size should be slightly enlarged from original 232x150 for proper visibility
+    expect(uno.width).toBeGreaterThanOrEqual(250);
+    expect(uno.height).toBeGreaterThanOrEqual(155);
+
+    const pinMap = {};
+    for (const p of uno.pins) {
+      pinMap[p.id] = p;
+    }
+
+    // Verify minimum pitch >= 12px between adjacent pins on digital top-left header
+    const topLeftPinIds = ['SCL', 'SDA', 'AREF', 'GND_D', 'D13', 'D12', 'D11', 'D10', 'D9', 'D8'];
+    for (let i = 0; i < topLeftPinIds.length - 1; i++) {
+      const p1 = pinMap[topLeftPinIds[i]];
+      const p2 = pinMap[topLeftPinIds[i + 1]];
+      expect(p2.x - p1.x).toBeGreaterThanOrEqual(12);
+    }
+
+    // Verify minimum pitch >= 12px between adjacent pins on digital top-right header
+    for (let i = 0; i < 7; i++) {
+      const pRight = pinMap[`D${i}`];
+      const pLeft = pinMap[`D${i + 1}`];
+      expect(pRight.x - pLeft.x).toBeGreaterThanOrEqual(12);
+    }
+
+    // Verify minimum pitch >= 12px between power header pins
+    const powerPinIds = ['NC', 'IOREF', 'RST', '3V3', '5V', 'GND1', 'GND2', 'VIN'];
+    for (let i = 0; i < powerPinIds.length - 1; i++) {
+      const p1 = pinMap[powerPinIds[i]];
+      const p2 = pinMap[powerPinIds[i + 1]];
+      expect(p2.x - p1.x).toBeGreaterThanOrEqual(12);
+    }
+
+    // Verify minimum pitch >= 12px between analog header pins
+    for (let i = 0; i < 5; i++) {
+      const p1 = pinMap[`A${i}`];
+      const p2 = pinMap[`A${i + 1}`];
+      expect(p2.x - p1.x).toBeGreaterThanOrEqual(12);
+    }
+  });
+
+  it('draws the board without throwing errors and renders all components cleanly', () => {
+    const textCalls = [];
+    const arcCalls = [];
+
+    const mockCtx = {
+      save: vi.fn(),
+      restore: vi.fn(),
+      translate: vi.fn(),
+      rotate: vi.fn(),
+      beginPath: vi.fn(),
+      closePath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      fill: vi.fn(),
+      fillRect: vi.fn(),
+      arc: vi.fn((x, y, r) => arcCalls.push({ x, y, r })),
+      setLineDash: vi.fn(),
+      measureText: vi.fn(text => ({ width: text.length * 4.5 })),
+      fillText: vi.fn((text, x, y) => textCalls.push({ text, x, y })),
+      createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
+      createRadialGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
+    };
+
+    expect(() => {
+      uno.draw(mockCtx, { x: 10, y: 20, width: uno.width, height: uno.height, selected: false }, { running: true });
+    }).not.toThrow();
+
+    // Verify essential silkscreen texts are drawn
+    const renderedTexts = textCalls.map(t => t.text);
+    expect(renderedTexts).toContain('ARDUINO');
+    expect(renderedTexts).toContain('UNO');
+    expect(renderedTexts).toContain('DIGITAL (PWM~)');
+    expect(renderedTexts).toContain('POWER');
+    expect(renderedTexts).toContain('ANALOG IN');
+    expect(renderedTexts).toContain('RESET');
+    expect(renderedTexts).toContain('MADE IN ITALY');
+    expect(renderedTexts).toContain('ATMEGA328P-PU');
+    expect(renderedTexts).toContain('ICSP');
+
+    // Verify section titles do not collide vertically with bottom pin labels (baseline 136)
+    const powerTitle = textCalls.find(t => t.text === 'POWER');
+    const analogTitle = textCalls.find(t => t.text === 'ANALOG IN');
+    expect(powerTitle.y).toBeLessThan(130);
+    expect(analogTitle.y).toBeLessThan(130);
   });
 });
